@@ -1,0 +1,50 @@
+abstract final class RouteNames {
+  static const splash = 'splash';
+  static const onboarding = 'onboarding';
+  static const login = 'login';
+  static const forgotPassword = 'forgot-password';
+  static const staffRejected = 'staff-rejected';
+  static const accountError = 'account-error';
+  static const accessBlocked = 'access-blocked';
+  static const dashboard = 'dashboard';
+  static const notifications = 'notifications';
+  static const appointments = 'appointments';
+  static const patients = 'patients';
+  static const patientRecord = 'patient-record';
+  static const more = 'more';
+  static const prescriptions = 'prescriptions';
+  static const billing = 'billing';
+  static const myWebsite = 'my-website';
+  static const blog = 'blog';
+  static const reviews = 'reviews';
+  static const inquiries = 'inquiries';
+  static const staff = 'staff';
+  static const settings = 'settings';
+  static const support = 'support';
+}
+
+abstract final class RoutePaths {
+  static const splash = '/splash';
+  static const onboarding = '/onboarding';
+  static const login = '/login';
+  static const forgotPassword = '/forgot-password';
+  static const staffRejected = '/doctor-only';
+  static const accountError = '/account-error';
+  static const accessBlocked = '/access-blocked';
+  static const app = '/app';
+  static const dashboard = '/app/dashboard';
+  static const notifications = '/app/notifications';
+  static const appointments = '/app/appointments';
+  static const patients = '/app/patients';
+  static String patientRecord(String patientId) => '/app/patients/$patientId';
+  static const more = '/app/more';
+  static const prescriptions = '/app/prescriptions';
+  static const billing = '/app/billing';
+  static const myWebsite = '/app/my-website';
+  static const blog = '/app/blog';
+  static const reviews = '/app/reviews';
+  static const inquiries = '/app/inquiries';
+  static const staff = '/app/staff';
+  static const settings = '/app/settings';
+  static const support = '/app/support';
+}
