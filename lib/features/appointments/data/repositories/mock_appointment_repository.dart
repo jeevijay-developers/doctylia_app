@@ -25,6 +25,7 @@ final class MockAppointmentRepository implements AppointmentRepository {
               ? 'Consultation'
               : draft.serviceName.trim(),
           scheduledAt: draft.scheduledAt,
+          isWalkIn: draft.isWalkIn,
           status: AppointmentStatus.pending,
           amount: draft.amount,
           type: draft.type,
@@ -63,6 +64,7 @@ final class MockAppointmentRepository implements AppointmentRepository {
           patientEmail: draft.patientEmail,
           serviceName: draft.serviceName,
           scheduledAt: draft.scheduledAt,
+          isWalkIn: draft.isWalkIn,
           status: old.status,
           paymentStatus: draft.paymentStatus,
           amount: draft.amount,
@@ -133,7 +135,7 @@ final class MockAppointmentRepository implements AppointmentRepository {
           (item.patientEmail?.toLowerCase().contains(term) ?? false) ||
           item.serviceName.toLowerCase().contains(term) ||
           (item.tokenNumber?.toLowerCase().contains(term) ?? false);
-      final statusMatch = query.status == null || item.status == query.status;
+      final statusMatch = item.status.matchesFilter(query.status);
       final from = query.dateFrom;
       final to = query.dateTo;
       final dateMatch =
@@ -175,7 +177,7 @@ final class MockAppointmentRepository implements AppointmentRepository {
             })
             .toList(growable: false);
         int count(AppointmentStatus status) =>
-            rows.where((item) => item.status == status).length;
+            rows.where((item) => item.status.matchesFilter(status)).length;
         return AppointmentSummary(
           total: rows.length,
           pending: count(AppointmentStatus.pending),

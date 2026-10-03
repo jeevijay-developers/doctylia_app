@@ -17,6 +17,7 @@ final class SupabaseAppointmentRepository implements AppointmentRepository {
   SupabaseAppointmentRepository(this._client);
 
   final SupabaseClient _client;
+  int _watcherSequence = 0;
   static const _columns =
       'id, patient_name, patient_phone, patient_age, patient_gender, '
       'patient_email, service_name, appointment_type, date, time_slot, '
@@ -101,7 +102,11 @@ final class SupabaseAppointmentRepository implements AppointmentRepository {
 
   dynamic _applyFilters(dynamic query, AppointmentQuery value) {
     final status = value.status;
-    if (status != null) {
+    if (status == AppointmentStatus.pending) {
+      // Web parity: "Pending" covers every upcoming, not-yet-seen booking,
+      // including website bookings that were auto-confirmed after payment.
+      query = query.inFilter('status', const ['pending', 'confirmed']);
+    } else if (status != null) {
       query = query.eq('status', AppointmentMapper.status(status));
     }
     if (value.dateFrom != null) {
@@ -153,33 +158,36 @@ final class SupabaseAppointmentRepository implements AppointmentRepository {
       });
 
   @override
-  Future<Result<void>> update(String id, AppointmentDraft draft) => _guard(
-    () async {
-      _validate(draft, allowPast: true);
-      final current = await _appointmentRow(id);
-      final oldDateTime = AppointmentMapper.dateTime(current);
-      final moved = oldDateTime != draft.scheduledAt;
-      if (moved && draft.scheduledAt.isBefore(DateTime.now())) {
-        throw const ValidationFailure(
-          'Cannot reschedule an appointment into the past.',
-        );
-      }
-      if (moved) await _ensureSlotAvailable(draft.scheduledAt, excludingId: id);
-      final values = _draftJson(draft);
-      if (moved) {
-        values['reschedule_count'] =
-            ((current['reschedule_count'] as num?)?.toInt() ?? 0) + 1;
-      }
-      await _client
-          .from('appointments')
-          .update(values)
-          .eq('id', id)
-          .eq('doctor_id', _doctorId);
-      if (moved && current['zoom_meeting_id'] != null) {
-        await _syncZoom(id, 'update');
-      }
-    },
-  );
+  Future<Result<void>> update(String id, AppointmentDraft draft) =>
+      _guard(() async {
+        _validate(draft, allowPast: true);
+        final current = await _appointmentRow(id);
+        final oldDateTime = AppointmentMapper.dateTime(current);
+        final wasWalkIn = current['time_slot'] == null;
+        final moved =
+            oldDateTime != draft.scheduledAt || wasWalkIn != draft.isWalkIn;
+        if (moved && _isInPast(draft)) {
+          throw const ValidationFailure(
+            'Cannot reschedule an appointment into the past.',
+          );
+        }
+        if (moved && !draft.isWalkIn) {
+          await _ensureSlotAvailable(draft.scheduledAt, excludingId: id);
+        }
+        final values = _draftJson(draft);
+        if (moved) {
+          values['reschedule_count'] =
+              ((current['reschedule_count'] as num?)?.toInt() ?? 0) + 1;
+        }
+        await _client
+            .from('appointments')
+            .update(values)
+            .eq('id', id)
+            .eq('doctor_id', _doctorId);
+        if (moved && current['zoom_meeting_id'] != null) {
+          await _syncZoom(id, 'update');
+        }
+      });
 
   @override
   Future<Result<void>> updatePaymentStatus(
@@ -455,8 +463,12 @@ final class SupabaseAppointmentRepository implements AppointmentRepository {
         ? 'online'
         : 'clinic',
     'date': _date(draft.scheduledAt),
-    'time_slot': DateFormat('HH:mm').format(draft.scheduledAt),
-    'amount': draft.amount,
+    'time_slot': draft.isWalkIn
+        ? null
+        : DateFormat('HH:mm').format(draft.scheduledAt),
+    // appointments.amount is an integer column: sending a Dart double
+    // ("500.0") makes PostgREST reject the whole insert/update with 22P02.
+    'amount': draft.amount.round(),
     'chief_complaint': _emptyToNull(draft.chiefComplaint),
     'notes': _emptyToNull(draft.notes),
     'payment_status': AppointmentMapper.paymentStatus(draft.paymentStatus),
@@ -485,11 +497,22 @@ final class SupabaseAppointmentRepository implements AppointmentRepository {
         !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
       throw const ValidationFailure('Enter a valid email address.');
     }
-    if (!allowPast && draft.scheduledAt.isBefore(DateTime.now())) {
+    if (!allowPast && _isInPast(draft)) {
       throw const ValidationFailure(
         'Cannot book an appointment for a past date or time slot.',
       );
     }
+  }
+
+  static bool _isInPast(AppointmentDraft draft) {
+    final now = DateTime.now();
+    if (!draft.isWalkIn) return draft.scheduledAt.isBefore(now);
+    final day = draft.scheduledAt;
+    return DateTime(
+      day.year,
+      day.month,
+      day.day,
+    ).isBefore(DateTime(now.year, now.month, now.day));
   }
 
   @override
@@ -499,7 +522,9 @@ final class SupabaseAppointmentRepository implements AppointmentRepository {
     controller = StreamController<void>(
       onListen: () {
         channel = _client
-            .channel('mobile-appointments-$_doctorId')
+            // Unique per watcher: the list rebuilds on every filter change and
+            // removing a same-named channel would also drop the new one.
+            .channel('mobile-appointments-$_doctorId-${_watcherSequence++}')
             .onPostgresChanges(
               event: PostgresChangeEvent.all,
               schema: 'public',
@@ -585,14 +610,15 @@ abstract final class AppointmentMapper {
   static Appointment fromJson(Map<String, dynamic> row) => Appointment(
     id: row['id'] as String,
     patientName: row['patient_name'] as String,
-    patientPhone: row['patient_phone'] as String,
+    patientPhone: row['patient_phone'] as String? ?? '',
     patientAge: (row['patient_age'] as num?)?.toInt(),
     patientGender: row['patient_gender'] as String?,
     patientEmail: row['patient_email'] as String?,
-    serviceName: row['service_name'] as String,
+    serviceName: row['service_name'] as String? ?? 'Consultation',
     scheduledAt: dateTime(row),
-    status: _status(row['status'] as String),
-    paymentStatus: _paymentStatus(row['payment_status'] as String),
+    isWalkIn: row['time_slot'] == null,
+    status: _status(row['status'] as String?),
+    paymentStatus: _paymentStatus(row['payment_status'] as String?),
     amount: (row['amount'] as num?)?.toDouble() ?? 0,
     type: row['appointment_type'] == 'online'
         ? AppointmentType.online
@@ -606,8 +632,14 @@ abstract final class AppointmentMapper {
     zoomStartUrl: row['zoom_start_url'] as String?,
   );
 
-  static DateTime dateTime(Map<String, dynamic> row) =>
-      DateTime.parse('${row['date']}T${row['time_slot']}');
+  /// Walk-ins (created on web) have a null `time_slot`; they map to midnight
+  /// of their date instead of crashing the whole page parse.
+  static DateTime dateTime(Map<String, dynamic> row) {
+    final slot = row['time_slot'] as String?;
+    return DateTime.parse(
+      slot == null || slot.isEmpty ? '${row['date']}' : '${row['date']}T$slot',
+    );
+  }
 
   static AppointmentDraft toDraft(Appointment value, {DateTime? scheduledAt}) =>
       AppointmentDraft(
@@ -615,6 +647,7 @@ abstract final class AppointmentMapper {
         patientPhone: value.patientPhone,
         serviceName: value.serviceName,
         scheduledAt: scheduledAt ?? value.scheduledAt,
+        isWalkIn: scheduledAt == null && value.isWalkIn,
         amount: value.amount,
         type: value.type,
         patientAge: value.patientAge,
@@ -641,23 +674,21 @@ abstract final class AppointmentMapper {
         AppointmentPaymentStatus.payAtClinic => 'pay_at_clinic',
       };
 
-  static AppointmentStatus _status(String value) => switch (value) {
-    'pending' => AppointmentStatus.pending,
+  // Unknown values fall back like the web's `statusConfig[x] || pending`
+  // rather than failing the entire list for one unexpected row.
+  static AppointmentStatus _status(String? value) => switch (value) {
     'confirmed' => AppointmentStatus.confirmed,
     'completed' => AppointmentStatus.completed,
     'cancelled' => AppointmentStatus.cancelled,
     'no_show' => AppointmentStatus.noShow,
-    _ => throw FormatException('Unknown appointments.status: $value'),
+    _ => AppointmentStatus.pending,
   };
 
-  static AppointmentPaymentStatus _paymentStatus(String value) =>
+  static AppointmentPaymentStatus _paymentStatus(String? value) =>
       switch (value) {
-        'pending' => AppointmentPaymentStatus.pending,
         'paid' => AppointmentPaymentStatus.paid,
         'refunded' => AppointmentPaymentStatus.refunded,
         'pay_at_clinic' => AppointmentPaymentStatus.payAtClinic,
-        _ => throw FormatException(
-          'Unknown appointments.payment_status: $value',
-        ),
+        _ => AppointmentPaymentStatus.pending,
       };
 }

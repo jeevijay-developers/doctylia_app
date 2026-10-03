@@ -25,16 +25,18 @@ Future<void> showAppointmentForm(
   BuildContext context,
   WidgetRef ref, {
   Appointment? appointment,
+  bool walkIn = false,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   showDragHandle: true,
-  builder: (_) => _AppointmentForm(appointment: appointment),
+  builder: (_) => _AppointmentForm(appointment: appointment, walkIn: walkIn),
 );
 
 class _AppointmentForm extends ConsumerStatefulWidget {
-  const _AppointmentForm({this.appointment});
+  const _AppointmentForm({this.appointment, this.walkIn = false});
   final Appointment? appointment;
+  final bool walkIn;
 
   @override
   ConsumerState<_AppointmentForm> createState() => _AppointmentFormState();
@@ -54,6 +56,7 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
   late AppointmentType _type;
   late AppointmentPaymentStatus _paymentStatus;
   String? _gender;
+  late bool _walkIn;
   bool _saving = false;
 
   @override
@@ -79,6 +82,11 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
     _type = item?.type ?? AppointmentType.clinic;
     _paymentStatus = item?.paymentStatus ?? AppointmentPaymentStatus.pending;
     _gender = item?.patientGender;
+    _walkIn = item?.isWalkIn ?? widget.walkIn;
+    if (_walkIn && item == null) {
+      final now = DateTime.now();
+      _scheduled = DateTime(now.year, now.month, now.day);
+    }
   }
 
   @override
@@ -261,6 +269,28 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
                 onChanged: (value) => _paymentStatus = value!,
               ),
               const SizedBox(height: AppSpacing.sm),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                activeTrackColor: AppColors.primary,
+                title: const Text('Walk-in'),
+                subtitle: const Text('No fixed time slot'),
+                value: _walkIn,
+                onChanged: (value) => setState(() {
+                  _walkIn = value;
+                  if (!value) {
+                    // Keep the chosen day but give it a bookable time.
+                    final next = _nextQuarterHour(DateTime.now());
+                    final onDay = DateTime(
+                      _scheduled.year,
+                      _scheduled.month,
+                      _scheduled.day,
+                      next.hour,
+                      next.minute,
+                    );
+                    _scheduled = onDay.isBefore(next) ? next : onDay;
+                  }
+                }),
+              ),
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
@@ -275,7 +305,9 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
                 onPressed: _pickDateTime,
                 icon: const Icon(Icons.event_rounded),
                 label: Text(
-                  DateFormat('d MMM yyyy · h:mm a').format(_scheduled),
+                  _walkIn
+                      ? '${DateFormat('d MMM yyyy').format(_scheduled)} · Walk-in'
+                      : DateFormat('d MMM yyyy · h:mm a').format(_scheduled),
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -341,6 +373,10 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
       lastDate: now.add(const Duration(days: 365)),
     );
     if (date == null || !mounted) return;
+    if (_walkIn) {
+      setState(() => _scheduled = DateTime(date.year, date.month, date.day));
+      return;
+    }
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(initial),
@@ -374,6 +410,7 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
       paymentStatus: _paymentStatus,
       chiefComplaint: _complaint.text,
       notes: _notes.text,
+      isWalkIn: _walkIn,
     );
     String? error;
     try {

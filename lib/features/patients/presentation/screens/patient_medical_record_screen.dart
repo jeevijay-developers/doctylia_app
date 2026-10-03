@@ -116,7 +116,9 @@ class _EntitledRecord extends ConsumerWidget {
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.black.withOpacity(0.45),
+                                  color: AppColors.onSurface(
+                                    context,
+                                  ).withValues(alpha: 0.45),
                                   letterSpacing: 0.2,
                                 ),
                               ),
@@ -130,7 +132,9 @@ class _EntitledRecord extends ConsumerWidget {
                                 '${value.phone} · ${value.age ?? '-'} yrs · ${value.gender ?? '-'}',
                                 style: TextStyle(
                                   fontSize: 12.5,
-                                  color: Colors.black.withOpacity(0.55),
+                                  color: AppColors.onSurface(
+                                    context,
+                                  ).withValues(alpha: 0.55),
                                 ),
                               ),
                             ],
@@ -292,7 +296,9 @@ class _RecordTabBar extends StatelessWidget {
             ],
           ),
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.black.withOpacity(0.55),
+          unselectedLabelColor: AppColors.onSurface(
+            context,
+          ).withValues(alpha: 0.55),
           labelStyle: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 12.5,
@@ -355,36 +361,42 @@ class _Overview extends ConsumerWidget {
               children: [
                 _CountCard(
                   label: 'Conditions',
+                  tabIndex: 1,
                   count: value.conditions.length,
                   icon: Icons.monitor_heart_rounded,
                   color: AppColors.primary,
                 ),
                 _CountCard(
                   label: 'Medications',
+                  tabIndex: 2,
                   count: value.medications.length,
                   icon: Icons.medication_rounded,
                   color: AppColors.teal,
                 ),
                 _CountCard(
                   label: 'Known allergies',
+                  tabIndex: 3,
                   count: value.allergies.length,
                   icon: Icons.warning_amber_rounded,
                   color: AppColors.warning,
                 ),
                 _CountCard(
                   label: 'Visits',
+                  tabIndex: 4,
                   count: value.visits.length,
                   icon: Icons.note_alt_rounded,
                   color: AppColors.pink,
                 ),
                 _CountCard(
                   label: 'Documents',
+                  tabIndex: 5,
                   count: value.documents.length,
                   icon: Icons.folder_rounded,
                   color: AppColors.orange,
                 ),
                 _CountCard(
                   label: 'Reminders',
+                  tabIndex: 7,
                   count: value.reminders.length,
                   icon: Icons.notifications_active_rounded,
                   color: AppColors.success,
@@ -401,7 +413,7 @@ class _Overview extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(color: Colors.black.withOpacity(0.05)),
+                  border: Border.all(color: AppColors.border(context)),
                 ),
                 child: Column(
                   children: [
@@ -440,15 +452,33 @@ class _CountCard extends StatelessWidget {
     required this.count,
     required this.icon,
     required this.color,
+    required this.tabIndex,
   });
   final String label;
   final int count;
   final IconData icon;
   final Color color;
 
+  /// Index in [_RecordTabBar._tabs] opened when the card is tapped (web
+  /// parity: overview cards navigate to their section).
+  final int tabIndex;
+
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 152,
+    child: Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: () => DefaultTabController.of(context).animateTo(tabIndex),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: _content(context),
+      ),
+    ),
+  );
+
+  Widget _content(BuildContext context) => Semantics(
+    button: true,
+    label: 'Open $label',
     child: Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
@@ -483,7 +513,7 @@ class _CountCard extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 12.5,
-              color: Colors.black.withOpacity(0.6),
+              color: AppColors.onSurface(context).withValues(alpha: 0.6),
             ),
           ),
         ],
@@ -582,7 +612,9 @@ class _LockedRecord extends StatelessWidget {
               'Upgrade to access history, visits, documents, vitals and '
               'reminders.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black.withOpacity(0.6)),
+              style: TextStyle(
+                color: AppColors.onSurface(context).withValues(alpha: 0.6),
+              ),
             ),
           ],
         ),

@@ -87,47 +87,63 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   20,
                   compact ? 12 : 20,
                 ),
-                child: Column(
+                child: Stack(
                   children: [
-                    Expanded(
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: _slides.length,
-                        onPageChanged: (index) =>
-                            setState(() => _pageIndex = index),
-                        itemBuilder: (context, index) => _OnboardingSlide(
-                          data: _slides[index],
-                          compact: compact,
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: compact ? 12 : 20),
-                    _PageIndicator(
-                      count: _slides.length,
-                      selectedIndex: _pageIndex,
-                    ),
-                    SizedBox(height: compact ? 14 : 24),
-                    _OnboardingButton(
-                      label: slide.buttonLabel,
-                      onPressed: isLastPage
-                          ? _complete
-                          : () => _pageController.nextPage(
-                              duration: const Duration(milliseconds: 320),
-                              curve: Curves.easeOutCubic,
+                    Column(
+                      children: [
+                        Expanded(
+                          child: PageView.builder(
+                            controller: _pageController,
+                            itemCount: _slides.length,
+                            onPageChanged: (index) =>
+                                setState(() => _pageIndex = index),
+                            itemBuilder: (context, index) => _OnboardingSlide(
+                              data: _slides[index],
+                              compact: compact,
                             ),
+                          ),
+                        ),
+                        SizedBox(height: compact ? 12 : 20),
+                        _PageIndicator(
+                          count: _slides.length,
+                          selectedIndex: _pageIndex,
+                        ),
+                        SizedBox(height: compact ? 14 : 24),
+                        _OnboardingButton(
+                          label: slide.buttonLabel,
+                          onPressed: isLastPage
+                              ? _complete
+                              : () => _pageController.nextPage(
+                                  duration: const Duration(milliseconds: 320),
+                                  curve: Curves.easeOutCubic,
+                                ),
+                        ),
+                        SizedBox(height: compact ? 8 : 14),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          child: Text(
+                            slide.caption,
+                            key: ValueKey(slide.caption),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: const Color(0xFF657084),
+                              fontSize: compact ? 13 : 15,
+                              fontStyle: FontStyle.italic,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: compact ? 8 : 14),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: Text(
-                        slide.caption,
-                        key: ValueKey(slide.caption),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: const Color(0xFF657084),
-                          fontSize: compact ? 13 : 15,
-                          fontStyle: FontStyle.italic,
-                          fontWeight: FontWeight.w500,
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: AnimatedOpacity(
+                        opacity: isLastPage ? 0 : 1,
+                        duration: const Duration(milliseconds: 180),
+                        child: IgnorePointer(
+                          ignoring: isLastPage,
+                          child: _SkipButton(onPressed: _complete),
                         ),
                       ),
                     ),
@@ -137,6 +153,29 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SkipButton extends StatelessWidget {
+  const _SkipButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: const Color(0xFF073D8D),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        minimumSize: const Size(48, 40),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      child: const Text(
+        'Skip',
+        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
       ),
     );
   }

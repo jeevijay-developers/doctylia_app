@@ -40,6 +40,7 @@ class AppointmentDraft {
     this.chiefComplaint,
     this.notes,
     this.paymentStatus = AppointmentPaymentStatus.pending,
+    this.isWalkIn = false,
   });
   final String patientName;
   final String patientPhone;
@@ -53,6 +54,10 @@ class AppointmentDraft {
   final String? chiefComplaint;
   final String? notes;
   final AppointmentPaymentStatus paymentStatus;
+
+  /// When true only the date of [scheduledAt] is used and no time slot is
+  /// stored, matching the web "Walk-in" option.
+  final bool isWalkIn;
 }
 
 class ZoomMeetingLinks {

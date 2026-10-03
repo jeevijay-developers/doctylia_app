@@ -92,7 +92,9 @@ class _PrescriptionCardState extends ConsumerState<PrescriptionCard> {
                       'Issued ${DateFormat('d MMMM yyyy').format(prescription.date)}',
                       style: TextStyle(
                         fontSize: 12.5,
-                        color: Colors.black.withValues(alpha: 0.55),
+                        color: AppColors.onSurface(
+                          context,
+                        ).withValues(alpha: 0.55),
                       ),
                     ),
                   ],
@@ -140,26 +142,15 @@ class _PrescriptionCardState extends ConsumerState<PrescriptionCard> {
                             '${entry.$2.name}${entry.$2.strength.isEmpty ? '' : ' - ${entry.$2.strength}'}',
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          if ([
-                            entry.$2.frequency,
-                            entry.$2.duration,
-                            entry.$2.timing,
-                            entry.$2.route,
-                            entry.$2.instructions,
-                          ].any((v) => v.isNotEmpty))
-                            Text(
-                              [
-                                entry.$2.frequency,
-                                entry.$2.duration,
-                                entry.$2.timing,
-                                entry.$2.route,
-                                entry.$2.instructions,
-                              ].where((value) => value.isNotEmpty).join(' · '),
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                color: Colors.black.withValues(alpha: 0.55),
-                              ),
+                          Text(
+                            entry.$2.slipLine,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.onSurface(
+                                context,
+                              ).withValues(alpha: 0.55),
                             ),
+                          ),
                         ],
                       ),
                     ),

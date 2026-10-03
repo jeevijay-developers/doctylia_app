@@ -43,8 +43,8 @@ class TodayScheduleCard extends ConsumerWidget {
                     ),
                     Text(
                       DateFormat('EEEE, MMM d').format(today),
-                      style: const TextStyle(
-                        color: Color(0xFF8B98B3),
+                      style: TextStyle(
+                        color: AppColors.subtleText(context),
                         fontSize: 10.5,
                       ),
                     ),
@@ -75,11 +75,12 @@ class TodayScheduleCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 11),
-          const Divider(height: 1, color: Color(0xFFEDF0F5)),
+          Divider(height: 1, color: AppColors.border(context)),
           if (appointments.isEmpty)
             _CompletedScheduleState(
               hadAppointments: totalTodayCount > 0,
-              onAddWalkIn: () => showAppointmentForm(context, ref),
+              onAddWalkIn: () =>
+                  showAppointmentForm(context, ref, walkIn: true),
               onCheckTomorrow: () => _checkTomorrow(context, ref),
             )
           else ...[
@@ -87,11 +88,12 @@ class TodayScheduleCard extends ConsumerWidget {
             for (var index = 0; index < appointments.length; index++) ...[
               AppointmentRow(appointment: appointments[index]),
               if (index != appointments.length - 1)
-                const Divider(height: 1, color: Color(0xFFEDF0F5)),
+                Divider(height: 1, color: AppColors.border(context)),
             ],
             const SizedBox(height: 8),
             _ScheduleActions(
-              onAddWalkIn: () => showAppointmentForm(context, ref),
+              onAddWalkIn: () =>
+                  showAppointmentForm(context, ref, walkIn: true),
               onCheckTomorrow: () => _checkTomorrow(context, ref),
             ),
           ],
@@ -172,14 +174,14 @@ class _ScheduleCompleteMark extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFE8F2FF),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           padding: const EdgeInsets.all(10),
           child: Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFDCEBFF),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.16),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -196,9 +198,9 @@ class _ScheduleCompleteMark extends StatelessWidget {
             width: 22,
             height: 22,
             decoration: BoxDecoration(
-              color: const Color(0xFFE6FAF3),
+              color: AppColors.success.withValues(alpha: 0.18),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
+              border: Border.all(color: AppColors.surface(context), width: 3),
             ),
             alignment: Alignment.center,
             child: Container(
@@ -233,8 +235,10 @@ class _ScheduleActions extends StatelessWidget {
           onPressed: onAddWalkIn,
           style: FilledButton.styleFrom(
             elevation: 0,
-            backgroundColor: const Color(0xFFEAF3FF),
-            foregroundColor: const Color(0xFF2463DD),
+            backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+            foregroundColor: AppColors.isDark(context)
+                ? AppColors.primary400
+                : AppColors.primary600,
             padding: const EdgeInsets.symmetric(vertical: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(9),
@@ -252,9 +256,9 @@ class _ScheduleActions extends StatelessWidget {
         child: OutlinedButton.icon(
           onPressed: onCheckTomorrow,
           style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF19233B),
+            foregroundColor: AppColors.onSurface(context),
             padding: const EdgeInsets.symmetric(vertical: 9),
-            side: const BorderSide(color: Color(0xFFDDE4EE)),
+            side: BorderSide(color: AppColors.border(context)),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(9),
             ),
@@ -312,9 +316,9 @@ class AppointmentRow extends StatelessWidget {
                 '${appointment.serviceName} \u00B7 ${appointment.appointmentType}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10.5,
-                  color: Color(0xFF7D899D),
+                  color: AppColors.mutedText(context),
                 ),
               ),
             ],

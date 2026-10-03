@@ -3,6 +3,7 @@ import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/features/prescriptions/domain/entities/prescription.dart';
 import 'package:doctylia_app/features/prescriptions/presentation/providers/prescription_providers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -20,20 +21,29 @@ Future<Prescription?> showPrescriptionForm(
 
 InputDecoration _fieldDecoration(
   String label, {
+  Widget? prefixIcon,
   Widget? suffixIcon,
   String? hintText,
 }) => InputDecoration(
   labelText: label,
   hintText: hintText,
+  prefixIcon: prefixIcon,
   suffixIcon: suffixIcon,
   filled: true,
-  fillColor: AppColors.primary.withOpacity(0.035),
+  fillColor: AppColors.primary.withValues(alpha: 0.035),
   border: OutlineInputBorder(
     borderRadius: BorderRadius.circular(AppRadius.sm),
     borderSide: BorderSide.none,
   ),
 );
 
+void _toast(BuildContext context, String message) => ScaffoldMessenger.of(
+  context,
+).showSnackBar(SnackBar(content: Text(message)));
+
+/// Mirrors the web "Add Prescription" dialog (PrescriptionsPage.tsx):
+/// existing patient → name/date → age/weight → diagnosis → structured
+/// medicines → Save Prescription.
 class _PrescriptionForm extends ConsumerStatefulWidget {
   const _PrescriptionForm({this.prescription});
   final Prescription? prescription;
@@ -47,17 +57,12 @@ class _PrescriptionFormState extends ConsumerState<_PrescriptionForm> {
   late final TextEditingController diagnosis;
   late final TextEditingController age;
   late final TextEditingController weight;
-  late final TextEditingController notes;
-  late final TextEditingController advice;
-  late final TextEditingController dietAdvice;
-  late final TextEditingController lifestyleAdvice;
-  late final TextEditingController followUpInstructions;
   late DateTime date;
-  DateTime? followUpDate;
   String? patientId;
-  String? visitId;
-  final medicineRows = <_MedicineControllers>[];
+  final medicines = <_MedicineFormItem>[];
   bool saving = false;
+
+  bool get _editing => widget.prescription != null;
 
   @override
   void initState() {
@@ -66,42 +71,22 @@ class _PrescriptionFormState extends ConsumerState<_PrescriptionForm> {
     patient = TextEditingController(text: value?.patientName);
     diagnosis = TextEditingController(text: value?.diagnosis);
     age = TextEditingController(text: value?.patientAge?.toString());
-    weight = TextEditingController(text: value?.patientWeight?.toString());
-    notes = TextEditingController(text: value?.notes);
-    advice = TextEditingController(text: value?.advice);
-    dietAdvice = TextEditingController(text: value?.dietAdvice);
-    lifestyleAdvice = TextEditingController(text: value?.lifestyleAdvice);
-    followUpInstructions = TextEditingController(
-      text: value?.followUpInstructions,
-    );
+    weight = TextEditingController(text: _weightText(value?.patientWeight));
     date = value?.date ?? DateTime.now();
-    followUpDate = value?.followUpDate;
     patientId = value?.patientId;
-    visitId = value?.visitId;
-    medicineRows.addAll(
-      value?.medicines.map(_MedicineControllers.fromItem) ??
-          [_MedicineControllers()],
+    // Existing medicines are already complete, so start them collapsed.
+    medicines.addAll(
+      value?.medicines.map(_MedicineFormItem.fromItem) ?? const [],
     );
-    if (medicineRows.isEmpty) medicineRows.add(_MedicineControllers());
   }
 
   @override
   void dispose() {
-    for (final controller in [
-      patient,
-      diagnosis,
-      age,
-      weight,
-      notes,
-      advice,
-      dietAdvice,
-      lifestyleAdvice,
-      followUpInstructions,
-    ]) {
+    for (final controller in [patient, diagnosis, age, weight]) {
       controller.dispose();
     }
-    for (final row in medicineRows) {
-      row.dispose();
+    for (final item in medicines) {
+      item.dispose();
     }
     super.dispose();
   }
@@ -120,30 +105,11 @@ class _PrescriptionFormState extends ConsumerState<_PrescriptionForm> {
         key: key,
         child: ListView(
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: const Icon(
-                    Icons.medication_rounded,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  widget.prescription == null
-                      ? 'Add Prescription'
-                      : 'Edit Prescription',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
+            Text(
+              _editing ? 'Edit Prescription' : 'Add Prescription',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: AppSpacing.md),
             patients.when(
@@ -151,15 +117,19 @@ class _PrescriptionFormState extends ConsumerState<_PrescriptionForm> {
                   const LinearProgressIndicator(color: AppColors.primary),
               error: (_, _) => const SizedBox.shrink(),
               data: (rows) {
+                if (rows.isEmpty) return const SizedBox.shrink();
                 final selected = rows.any((item) => item.id == patientId)
                     ? patientId
                     : null;
-                if (rows.isEmpty) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                   child: DropdownButtonFormField<String>(
                     initialValue: selected,
-                    decoration: _fieldDecoration('Select existing patient'),
+                    isExpanded: true,
+                    decoration: _fieldDecoration(
+                      _editing ? 'Linked Patient' : 'Select Existing Patient',
+                      hintText: '-- Or type name below --',
+                    ),
                     items: rows
                         .map(
                           (item) => DropdownMenuItem(
@@ -187,141 +157,131 @@ class _PrescriptionFormState extends ConsumerState<_PrescriptionForm> {
                 );
               },
             ),
-            TextFormField(
-              controller: patient,
-              decoration: _fieldDecoration('Patient name *'),
-              validator: (value) => (value ?? '').trim().isEmpty
-                  ? 'Patient name is required'
-                  : null,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: patient,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: _fieldDecoration(
+                      'Patient Name *',
+                      prefixIcon: const Icon(Icons.person_outline, size: 18),
+                    ),
+                    validator: (value) => (value ?? '').trim().isEmpty
+                        ? 'Patient name is required'
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: _DateField(
+                    label: 'Date',
+                    value: date,
+                    onChanged: (value) => setState(() => date = value),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.sm),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: _DateField(
-                    label: 'Prescription date',
-                    value: date,
-                    onChanged: (value) => setState(() => date = value),
+                  child: TextFormField(
+                    controller: age,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
+                    decoration: _fieldDecoration('Age'),
+                    validator: _validateAge,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: TextFormField(
-                    controller: age,
-                    keyboardType: TextInputType.number,
-                    decoration: _fieldDecoration('Age'),
-                    validator: _validateAge,
+                    controller: weight,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    decoration: _fieldDecoration('Weight (kg)'),
+                    validator: _validateWeight,
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: weight,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: _fieldDecoration('Weight (kg)'),
-              validator: _validateWeight,
             ),
             const SizedBox(height: AppSpacing.sm),
             TextFormField(
               controller: diagnosis,
-              decoration: _fieldDecoration('Diagnosis'),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Row(
-              children: [
-                const Icon(
-                  Icons.medication_rounded,
+              decoration: _fieldDecoration(
+                'Diagnosis',
+                hintText: 'e.g. Acute bronchitis',
+                prefixIcon: const Icon(
+                  Icons.medical_services_outlined,
                   size: 18,
-                  color: AppColors.primary,
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Medicines',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                  ),
-                  onPressed: () =>
-                      setState(() => medicineRows.add(_MedicineControllers())),
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Add medicine'),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const Row(
+              children: [
+                Icon(Icons.medication_rounded, size: 16),
+                SizedBox(width: 6),
+                Text(
+                  'Medicines',
+                  style: TextStyle(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Use the same medicine details shown on the web prescription.',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 11),
-              ),
-            ),
             const SizedBox(height: AppSpacing.xs),
-            ...medicineRows.indexed.map(
-              (entry) => _MedicineEditor(
-                index: entry.$1,
-                controllers: entry.$2,
-                canRemove: medicineRows.length > 1,
-                onRemove: () =>
-                    setState(() => medicineRows.removeAt(entry.$1).dispose()),
+            for (final (index, item) in medicines.indexed)
+              Padding(
+                key: ObjectKey(item),
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: _MedicineRowEditor(
+                  item: item,
+                  index: index,
+                  onChanged: () => setState(() {}),
+                  onRemove: () =>
+                      setState(() => medicines.removeAt(index).dispose()),
+                ),
               ),
-            ),
-            TextFormField(
-              controller: advice,
-              maxLines: 2,
-              decoration: _fieldDecoration('General advice'),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: dietAdvice,
-              maxLines: 2,
-              decoration: _fieldDecoration('Diet advice'),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: lifestyleAdvice,
-              maxLines: 2,
-              decoration: _fieldDecoration('Lifestyle advice'),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            _OptionalDateField(
-              label: 'Follow-up date',
-              value: followUpDate,
-              onChanged: (value) => setState(() => followUpDate = value),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: followUpInstructions,
-              maxLines: 2,
-              decoration: _fieldDecoration('Follow-up instructions'),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextFormField(
-              controller: notes,
-              maxLines: 2,
-              decoration: _fieldDecoration('Internal notes'),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  minimumSize: const Size(double.infinity, 50),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
                 ),
-                onPressed: saving ? null : _save,
-                child: Text(saving ? 'Saving...' : 'Save prescription'),
+                onPressed: () =>
+                    setState(() => medicines.add(_MedicineFormItem())),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Medicine'),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                minimumSize: const Size(double.infinity, 50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+              ),
+              onPressed: saving ? null : _save,
+              child: Text(
+                saving
+                    ? 'Saving...'
+                    : _editing
+                    ? 'Save Changes'
+                    : 'Save Prescription',
               ),
             ),
           ],
@@ -334,238 +294,386 @@ class _PrescriptionFormState extends ConsumerState<_PrescriptionForm> {
     if (value == null || value.trim().isEmpty) return null;
     final parsed = int.tryParse(value);
     return parsed == null || parsed < 0 || parsed > 120
-        ? 'Enter an age from 0 to 120'
+        ? 'Please enter a valid age (0–120)'
         : null;
   }
 
   String? _validateWeight(String? value) {
     if (value == null || value.trim().isEmpty) return null;
     final parsed = double.tryParse(value);
-    return parsed == null || parsed < 0 ? 'Enter a valid weight' : null;
+    return parsed == null || parsed < 0 ? 'Weight cannot be negative' : null;
   }
 
   Future<void> _save() async {
     if (!(key.currentState?.validate() ?? false)) return;
-    final medicines = medicineRows
-        .map((row) => row.item)
-        .where((item) => item.name.trim().isNotEmpty)
-        .toList();
-    if (medicines.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one medicine.')),
-      );
-      return;
+    // Web parity: untouched rows are silently dropped; touched rows must be
+    // complete.
+    final touched = medicines.where((item) => item.touched).toList();
+    for (final item in touched) {
+      final error = item.validate();
+      if (error != null) {
+        _toast(context, error);
+        return;
+      }
     }
     setState(() => saving = true);
+    final existing = widget.prescription;
     final draft = PrescriptionDraft(
       patientId: patientId,
       patientName: patient.text.trim(),
       diagnosis: _empty(diagnosis.text),
-      medicines: medicines,
-      notes: _empty(notes.text),
+      medicines: touched.map((item) => item.toItem()).toList(),
       date: date,
       patientAge: int.tryParse(age.text),
       patientWeight: double.tryParse(weight.text),
-      advice: _empty(advice.text),
-      dietAdvice: _empty(dietAdvice.text),
-      lifestyleAdvice: _empty(lifestyleAdvice.text),
-      followUpDate: followUpDate,
-      followUpInstructions: _empty(followUpInstructions.text),
-      visitId: visitId,
+      // The web form does not edit these; keep whatever is already stored.
+      notes: existing?.notes,
+      advice: existing?.advice,
+      dietAdvice: existing?.dietAdvice,
+      lifestyleAdvice: existing?.lifestyleAdvice,
+      followUpDate: existing?.followUpDate,
+      followUpInstructions: existing?.followUpInstructions,
+      visitId: existing?.visitId,
     );
     final controller = ref.read(prescriptionsProvider.notifier);
-    final result = widget.prescription == null
+    final result = existing == null
         ? await controller.createResult(draft)
-        : await controller.updatePrescription(widget.prescription!.id, draft);
+        : await controller.updatePrescription(existing.id, draft);
     if (!mounted) return;
     setState(() => saving = false);
     result.fold(
       onSuccess: (value) => Navigator.pop(context, value),
-      onFailure: (failure) => ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(failure.userMessage))),
+      onFailure: (failure) => _toast(context, failure.userMessage),
     );
   }
 
   static String? _empty(String value) =>
       value.trim().isEmpty ? null : value.trim();
-}
 
-class _MedicineControllers {
-  _MedicineControllers({MedicineItem? item})
-    : name = TextEditingController(text: item?.name),
-      strength = TextEditingController(text: item?.strength),
-      frequency = TextEditingController(text: item?.frequency),
-      duration = TextEditingController(text: item?.duration),
-      timing = TextEditingController(text: item?.timing),
-      route = TextEditingController(text: item?.route),
-      instructions = TextEditingController(text: item?.instructions);
-  factory _MedicineControllers.fromItem(MedicineItem item) =>
-      _MedicineControllers(item: item);
-  final TextEditingController name;
-  final TextEditingController strength;
-  final TextEditingController frequency;
-  final TextEditingController duration;
-  final TextEditingController timing;
-  final TextEditingController route;
-  final TextEditingController instructions;
-  MedicineItem get item => MedicineItem(
-    name: name.text.trim(),
-    strength: strength.text.trim(),
-    frequency: frequency.text.trim(),
-    duration: duration.text.trim(),
-    timing: timing.text.trim(),
-    route: route.text.trim(),
-    instructions: instructions.text.trim(),
-  );
-  void dispose() {
-    for (final value in [
-      name,
-      strength,
-      frequency,
-      duration,
-      timing,
-      route,
-      instructions,
-    ]) {
-      value.dispose();
-    }
+  static String? _weightText(double? value) {
+    if (value == null) return null;
+    return value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toString();
   }
 }
 
-class _MedicineEditor extends StatelessWidget {
-  const _MedicineEditor({
+/// Form-side mirror of [MedicineItem] (web `MedicineFormItem`). `saved` is
+/// UI-only: true collapses the card to its one-line summary.
+class _MedicineFormItem {
+  _MedicineFormItem({MedicineItem? item, this.saved = false})
+    : name = TextEditingController(text: item?.name),
+      strength = TextEditingController(text: item?.strength),
+      durationDays = TextEditingController(
+        text: (item?.durationDays ?? 0) > 0 ? '${item!.durationDays}' : '',
+      ),
+      morning = item?.morning ?? false,
+      afternoon = item?.afternoon ?? false,
+      evening = item?.evening ?? false,
+      food = item?.food ?? MedicineFood.after;
+
+  factory _MedicineFormItem.fromItem(MedicineItem item) =>
+      _MedicineFormItem(item: item, saved: true);
+
+  final TextEditingController name;
+  final TextEditingController strength;
+  final TextEditingController durationDays;
+  bool morning;
+  bool afternoon;
+  bool evening;
+  MedicineFood food;
+  bool saved;
+
+  bool get touched =>
+      name.text.trim().isNotEmpty ||
+      strength.text.trim().isNotEmpty ||
+      durationDays.text.trim().isNotEmpty ||
+      morning ||
+      afternoon ||
+      evening;
+
+  String? validate() {
+    final label = name.text.trim();
+    if (label.isEmpty) return 'Enter a medicine name.';
+    if (strength.text.trim().isEmpty) return 'Enter a strength/dose.';
+    final days = int.tryParse(durationDays.text.trim()) ?? 0;
+    if (days <= 0) return 'Enter a valid duration (in days) for $label.';
+    return null;
+  }
+
+  MedicineItem toItem() => MedicineItem(
+    name: name.text.trim(),
+    strength: strength.text.trim(),
+    morning: morning,
+    afternoon: afternoon,
+    evening: evening,
+    durationDays: int.tryParse(durationDays.text.trim()) ?? 0,
+    food: food,
+  );
+
+  void dispose() {
+    name.dispose();
+    strength.dispose();
+    durationDays.dispose();
+  }
+}
+
+class _MedicineRowEditor extends StatelessWidget {
+  const _MedicineRowEditor({
+    required this.item,
     required this.index,
-    required this.controllers,
-    required this.canRemove,
+    required this.onChanged,
     required this.onRemove,
   });
+
+  final _MedicineFormItem item;
   final int index;
-  final _MedicineControllers controllers;
-  final bool canRemove;
+  final VoidCallback onChanged;
   final VoidCallback onRemove;
+
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: AppSpacing.md),
-    padding: const EdgeInsets.all(AppSpacing.sm),
-    decoration: BoxDecoration(
-      color: AppColors.primary.withOpacity(0.035),
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      border: Border.all(color: AppColors.primary.withOpacity(0.12)),
-    ),
-    child: Column(
+  Widget build(BuildContext context) {
+    final border = BorderRadius.circular(AppRadius.md);
+    final decoration = BoxDecoration(
+      color: Theme.of(context).cardColor,
+      borderRadius: border,
+      border: Border.all(color: AppColors.border(context)),
+    );
+    final removeButton = IconButton(
+      onPressed: onRemove,
+      tooltip: 'Remove medicine ${index + 1}',
+      visualDensity: VisualDensity.compact,
+      icon: const Icon(
+        Icons.delete_outline_rounded,
+        size: 18,
+        color: AppColors.destructive,
+      ),
+    );
+
+    if (item.saved) {
+      final value = item.toItem();
+      final strength = value.strength.isEmpty ? '' : ' — ${value.strength}';
+      return Container(
+        decoration: decoration,
+        padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, 4, 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: _edit,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${index + 1}. ${value.name}$strength',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      value.summary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.mutedText(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: _edit,
+              tooltip: 'Edit medicine ${index + 1}',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+            ),
+            removeButton,
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      decoration: decoration,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Medicine ${index + 1}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.mutedText(context),
+                  ),
+                ),
+              ),
+              removeButton,
+            ],
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: item.name,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: _fieldDecoration(
+                    'Medicine Name *',
+                    hintText: 'e.g. Paracetamol',
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: TextField(
+                  controller: item.strength,
+                  decoration: _fieldDecoration(
+                    'Strength/Dose *',
+                    hintText: 'e.g. 500 mg',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.sm,
+            children: [
+              _TimeOfDayCheck(
+                label: 'Morning',
+                value: item.morning,
+                onChanged: (value) {
+                  item.morning = value;
+                  onChanged();
+                },
+              ),
+              _TimeOfDayCheck(
+                label: 'Afternoon',
+                value: item.afternoon,
+                onChanged: (value) {
+                  item.afternoon = value;
+                  onChanged();
+                },
+              ),
+              _TimeOfDayCheck(
+                label: 'Evening/Night',
+                value: item.evening,
+                onChanged: (value) {
+                  item.evening = value;
+                  onChanged();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: item.durationDays,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(3),
+                  ],
+                  decoration: _fieldDecoration(
+                    'Duration (days) *',
+                    hintText: 'e.g. 5',
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: DropdownButtonFormField<MedicineFood>(
+                  initialValue: item.food,
+                  isExpanded: true,
+                  decoration: _fieldDecoration('Food Instruction *'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: MedicineFood.before,
+                      child: Text('Before Food'),
+                    ),
+                    DropdownMenuItem(
+                      value: MedicineFood.after,
+                      child: Text('After Food'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    item.food = value ?? MedicineFood.after;
+                    onChanged();
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+              ),
+              onPressed: () {
+                final error = item.validate();
+                if (error != null) {
+                  _toast(context, error);
+                  return;
+                }
+                item.saved = true;
+                onChanged();
+              },
+              child: const Text('Save Medicine'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _edit() {
+    item.saved = false;
+    onChanged();
+  }
+}
+
+class _TimeOfDayCheck extends StatelessWidget {
+  const _TimeOfDayCheck({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: () => onChanged(!value),
+    borderRadius: BorderRadius.circular(AppRadius.sm),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 26,
-              height: 26,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.16),
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                '${index + 1}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Expanded(
-              child: Text(
-                'Medicine ${index + 1}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-            if (canRemove)
-              IconButton(
-                onPressed: onRemove,
-                icon: const Icon(
-                  Icons.close_rounded,
-                  size: 18,
-                  color: AppColors.destructive,
-                ),
-                tooltip: 'Remove medicine',
-                visualDensity: VisualDensity.compact,
-              ),
-          ],
+        Checkbox(
+          value: value,
+          activeColor: AppColors.primary,
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          onChanged: (checked) => onChanged(checked ?? false),
         ),
-        const SizedBox(height: AppSpacing.xs),
-        TextFormField(
-          controller: controllers.name,
-          decoration: _fieldDecoration(
-            'Medicine name *',
-            hintText: 'e.g. Paracetamol',
-          ),
-          validator: (value) =>
-              (value ?? '').trim().isEmpty ? 'Medicine name is required' : null,
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: controllers.strength,
-                decoration: _fieldDecoration(
-                  'Strength / dosage',
-                  hintText: 'e.g. 500 mg',
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Expanded(
-              child: TextFormField(
-                controller: controllers.frequency,
-                decoration: _fieldDecoration(
-                  'Frequency',
-                  hintText: 'e.g. Twice daily',
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: controllers.duration,
-                decoration: _fieldDecoration(
-                  'Duration',
-                  hintText: 'e.g. 5 days',
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Expanded(
-              child: TextFormField(
-                controller: controllers.timing,
-                decoration: _fieldDecoration(
-                  'When to take',
-                  hintText: 'e.g. After food',
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        TextFormField(
-          controller: controllers.route,
-          decoration: _fieldDecoration('Route', hintText: 'e.g. Oral'),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        TextFormField(
-          controller: controllers.instructions,
-          maxLines: 2,
-          decoration: _fieldDecoration(
-            'Additional instructions',
-            hintText: 'Special directions for the patient',
-          ),
-        ),
+        Text(label, style: const TextStyle(fontSize: 12.5)),
+        const SizedBox(width: 4),
       ],
     ),
   );
@@ -598,46 +706,6 @@ class _DateField extends StatelessWidget {
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 3650)),
       initialDate: value,
-    );
-    if (picked != null) onChanged(picked);
-  }
-}
-
-class _OptionalDateField extends StatelessWidget {
-  const _OptionalDateField({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-  final String label;
-  final DateTime? value;
-  final ValueChanged<DateTime?> onChanged;
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: () => _pick(context),
-    borderRadius: BorderRadius.circular(AppRadius.sm),
-    child: InputDecorator(
-      decoration: _fieldDecoration(
-        label,
-        suffixIcon: value == null
-            ? const Icon(Icons.calendar_today_rounded, size: 18)
-            : IconButton(
-                onPressed: () => onChanged(null),
-                icon: const Icon(Icons.close_rounded, size: 18),
-                visualDensity: VisualDensity.compact,
-              ),
-      ),
-      child: Text(
-        value == null ? 'Not set' : DateFormat('dd MMM yyyy').format(value!),
-      ),
-    ),
-  );
-  Future<void> _pick(BuildContext context) async {
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 3650)),
-      initialDate: value ?? DateTime.now(),
     );
     if (picked != null) onChanged(picked);
   }

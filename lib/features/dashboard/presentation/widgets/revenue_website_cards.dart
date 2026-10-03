@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:doctylia_app/core/platform/external_link_service.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
+import 'package:doctylia_app/core/widgets/whatsapp_icon.dart';
 import 'package:doctylia_app/features/dashboard/domain/entities/dashboard_snapshot.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -139,6 +140,14 @@ class _RevenueLineChart extends StatelessWidget {
       symbol: '\u20B9',
       decimalDigits: 2,
     );
+    // Axis ticks use whole compact values ("\u20B912K") so they fit their column
+    // instead of spilling over the plot ("\u20B912.35K").
+    final axisMoney = NumberFormat.compactCurrency(
+      locale: 'en_IN',
+      symbol: '\u20B9',
+      decimalDigits: 0,
+    );
+    final axisLabelColor = AppColors.subtleText(context);
 
     return LineChart(
       LineChartData(
@@ -151,10 +160,10 @@ class _RevenueLineChart extends StatelessWidget {
         gridData: FlGridData(
           drawVerticalLine: false,
           horizontalInterval: interval,
-          getDrawingHorizontalLine: (_) => const FlLine(
-            color: Color(0xFFE6EBF2),
+          getDrawingHorizontalLine: (_) => FlLine(
+            color: AppColors.border(context),
             strokeWidth: 1,
-            dashArray: [3, 3],
+            dashArray: const [3, 3],
           ),
         ),
         titlesData: FlTitlesData(
@@ -167,11 +176,17 @@ class _RevenueLineChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 34,
+              reservedSize: 40,
               interval: interval,
-              getTitlesWidget: (value, meta) => Text(
-                money.format(value),
-                style: const TextStyle(color: Color(0xFF8A98AE), fontSize: 8),
+              getTitlesWidget: (value, meta) => SideTitleWidget(
+                axisSide: meta.axisSide,
+                space: 6,
+                fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
+                child: Text(
+                  axisMoney.format(value),
+                  maxLines: 1,
+                  style: TextStyle(color: axisLabelColor, fontSize: 8),
+                ),
               ),
             ),
           ),
@@ -186,16 +201,19 @@ class _RevenueLineChart extends StatelessWidget {
                   return const SizedBox.shrink();
                 }
                 final isLast = index == points.length - 1;
-                return Padding(
-                  padding: const EdgeInsets.only(top: 7),
+                // fitInside keeps the first/last dates within the card
+                // instead of overlapping the y-axis or the card edge.
+                return SideTitleWidget(
+                  axisSide: meta.axisSide,
+                  space: 7,
+                  fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
                   child: Text(
                     isLast
-                        ? 'Today (${DateFormat('MMM d').format(points[index].day)})'
+                        ? 'Today'
                         : DateFormat('MMM d').format(points[index].day),
+                    maxLines: 1,
                     style: TextStyle(
-                      color: isLast
-                          ? AppColors.primary
-                          : const Color(0xFF8A98AE),
+                      color: isLast ? AppColors.primary : axisLabelColor,
                       fontSize: 8,
                       fontWeight: isLast ? FontWeight.w700 : FontWeight.w500,
                     ),
@@ -359,10 +377,10 @@ class WebsiteShareCard extends ConsumerWidget {
                   onPressed: url == null ? null : () => _copy(context, url),
                   tooltip: 'Copy link',
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.copy_rounded,
                     size: 14,
-                    color: Color(0xFF6F7F98),
+                    color: AppColors.subtleText(context),
                   ),
                 ),
               ],
@@ -377,8 +395,8 @@ class WebsiteShareCard extends ConsumerWidget {
                       ? null
                       : () => _openSite(context, ref, url),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF172238),
-                    side: const BorderSide(color: Color(0xFFDCE3ED)),
+                    foregroundColor: AppColors.onSurface(context),
+                    side: BorderSide(color: AppColors.border(context)),
                     padding: const EdgeInsets.symmetric(vertical: 11),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(9),
@@ -397,17 +415,26 @@ class WebsiteShareCard extends ConsumerWidget {
                   onPressed: url == null ? null : () => _share(ref, url),
                   style: FilledButton.styleFrom(
                     elevation: 0,
-                    backgroundColor: const Color(0xFF00AE75),
-                    disabledBackgroundColor: const Color(0xFFE4E9F0),
+                    backgroundColor: WhatsAppIcon.brandColor,
+                    disabledBackgroundColor: AppColors.secondarySurface(
+                      context,
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 11),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(9),
                     ),
                   ),
-                  icon: const Icon(Icons.chat_bubble_rounded, size: 14),
-                  label: const Text(
-                    'WhatsApp',
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                  icon: const WhatsAppIcon(size: 16, withBackground: false),
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Share on WhatsApp',
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -462,10 +489,10 @@ class _DashboardSectionCard extends StatelessWidget {
     decoration: BoxDecoration(
       color: Theme.of(context).cardColor,
       borderRadius: BorderRadius.circular(AppRadius.md),
-      border: Border.all(color: const Color(0xFFE3E8F0)),
+      border: Border.all(color: AppColors.border(context)),
       boxShadow: [
         BoxShadow(
-          color: const Color(0xFF12213B).withValues(alpha: 0.055),
+          color: AppColors.shadow(context, alpha: 0.055),
           blurRadius: 12,
           offset: const Offset(0, 4),
         ),

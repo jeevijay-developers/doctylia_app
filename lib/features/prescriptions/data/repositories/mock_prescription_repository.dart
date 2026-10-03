@@ -143,8 +143,9 @@ List<Prescription> _seedPrescriptions() {
         MedicineItem(
           name: index.isEven ? 'Paracetamol' : 'Amlodipine',
           strength: index.isEven ? '500 mg' : '5 mg',
-          frequency: 'Once daily',
-          duration: '5 days',
+          morning: true,
+          evening: index.isEven,
+          durationDays: 5,
         ),
       ],
       notes: 'Take after food',

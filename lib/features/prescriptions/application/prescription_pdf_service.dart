@@ -286,12 +286,6 @@ abstract final class PrescriptionPdfService {
     return pw.Column(
       children: rx.medicines.indexed.map((entry) {
         final medicine = entry.$2;
-        final attributes = <String>[
-          if (medicine.frequency.isNotEmpty) 'Dosage: ${medicine.frequency}',
-          if (medicine.duration.isNotEmpty) 'Duration: ${medicine.duration}',
-          if (medicine.timing.isNotEmpty) 'Timing: ${medicine.timing}',
-          if (medicine.route.isNotEmpty) 'Route: ${medicine.route}',
-        ];
         return pw.Padding(
           padding: const pw.EdgeInsets.only(bottom: 11),
           child: pw.Column(
@@ -304,29 +298,16 @@ abstract final class PrescriptionPdfService {
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              if (attributes.isNotEmpty)
-                pw.Padding(
-                  padding: const pw.EdgeInsets.only(left: 13, top: 2),
-                  child: pw.Text(
-                    attributes.join('  |  '),
-                    style: const pw.TextStyle(
-                      fontSize: 9,
-                      color: PdfColors.grey700,
-                    ),
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(left: 13, top: 2),
+                child: pw.Text(
+                  medicine.slipLine,
+                  style: const pw.TextStyle(
+                    fontSize: 9,
+                    color: PdfColors.grey700,
                   ),
                 ),
-              if (medicine.instructions.isNotEmpty)
-                pw.Padding(
-                  padding: const pw.EdgeInsets.only(left: 13, top: 2),
-                  child: pw.Text(
-                    medicine.instructions,
-                    style: pw.TextStyle(
-                      fontSize: 9,
-                      color: PdfColors.grey600,
-                      fontStyle: pw.FontStyle.italic,
-                    ),
-                  ),
-                ),
+              ),
             ],
           ),
         );

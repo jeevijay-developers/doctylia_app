@@ -1052,7 +1052,9 @@ class _TransactionCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.black.withValues(alpha: 0.55),
+                          color: AppColors.onSurface(
+                            context,
+                          ).withValues(alpha: 0.55),
                         ),
                       ),
                     ),
@@ -1278,7 +1280,7 @@ class _InvoiceCard extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.black.withValues(alpha: 0.55),
+                    color: AppColors.onSurface(context).withValues(alpha: 0.55),
                   ),
                 ),
               ],
@@ -1347,7 +1349,9 @@ class _LockedBilling extends StatelessWidget {
               'Track revenue, GST invoices and transactions with Pro or '
               'Premium.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+              style: TextStyle(
+                color: AppColors.onSurface(context).withValues(alpha: 0.6),
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             SizedBox(

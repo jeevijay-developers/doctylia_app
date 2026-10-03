@@ -593,7 +593,7 @@ class _RecordCard extends StatelessWidget {
           : Icon(
               Icons.open_in_new_rounded,
               size: 18,
-              color: Colors.black.withOpacity(0.35),
+              color: AppColors.onSurface(context).withValues(alpha: 0.35),
             );
     } else {
       trailing = Row(
@@ -626,7 +626,7 @@ class _RecordCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: AppColors.border(context)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -669,7 +669,9 @@ class _RecordCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12.5,
                           height: 1.4,
-                          color: Colors.black.withOpacity(0.55),
+                          color: AppColors.onSurface(
+                            context,
+                          ).withValues(alpha: 0.55),
                         ),
                       ),
                     ],
@@ -771,7 +773,7 @@ class _RecordFormState extends ConsumerState<_RecordForm> {
               height: 4,
               margin: const EdgeInsets.only(bottom: AppSpacing.md),
               decoration: BoxDecoration(
-                color: Colors.black12,
+                color: AppColors.border(context),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -1080,7 +1082,7 @@ class _StateMessage extends StatelessWidget {
             height: 64,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.textMuted.withOpacity(0.12),
+              color: AppColors.mutedText(context).withValues(alpha: 0.12),
             ),
             child: Icon(icon, size: 30, color: AppColors.textMuted),
           ),

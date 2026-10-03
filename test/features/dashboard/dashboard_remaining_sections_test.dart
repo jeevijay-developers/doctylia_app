@@ -1,3 +1,4 @@
+import 'package:doctylia_app/core/widgets/whatsapp_icon.dart';
 import 'package:doctylia_app/features/dashboard/domain/entities/dashboard_snapshot.dart';
 import 'package:doctylia_app/features/dashboard/presentation/widgets/revenue_website_cards.dart';
 import 'package:doctylia_app/features/dashboard/presentation/widgets/today_schedule_card.dart';
@@ -67,10 +68,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('Share Your Website'), findsOneWidget);
-    expect(find.text('WhatsApp'), findsOneWidget);
-    expect(find.byIcon(Icons.chat_bubble_rounded), findsOneWidget);
+    expect(find.text('Share on WhatsApp'), findsOneWidget);
+    expect(find.byType(WhatsAppIcon), findsOneWidget);
     final whatsappFinder = find.ancestor(
-      of: find.text('WhatsApp'),
+      of: find.text('Share on WhatsApp'),
       matching: find.byWidgetPredicate((widget) => widget is FilledButton),
     );
     final whatsapp = tester.widget<FilledButton>(whatsappFinder);

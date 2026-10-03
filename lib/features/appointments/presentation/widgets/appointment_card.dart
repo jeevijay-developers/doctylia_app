@@ -129,9 +129,11 @@ class AppointmentCard extends ConsumerWidget {
                                 const SizedBox(width: 3),
                                 Expanded(
                                   child: Text(
-                                    DateFormat(
-                                      'EEE, d MMM • h:mm a',
-                                    ).format(appointment.scheduledAt),
+                                    appointment.isWalkIn
+                                        ? '${DateFormat('EEE, d MMM').format(appointment.scheduledAt)} • Walk-in'
+                                        : DateFormat(
+                                            'EEE, d MMM • h:mm a',
+                                          ).format(appointment.scheduledAt),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
@@ -267,7 +269,9 @@ class _AppointmentDetailsState extends ConsumerState<_AppointmentDetails> {
                         Text(
                           '${appointment.serviceName} · ${appointment.type.name}',
                           style: TextStyle(
-                            color: Colors.black.withValues(alpha: 0.55),
+                            color: AppColors.onSurface(
+                              context,
+                            ).withValues(alpha: 0.55),
                           ),
                         ),
                       ],
@@ -282,9 +286,11 @@ class _AppointmentDetailsState extends ConsumerState<_AppointmentDetails> {
               ),
               _InfoRow(
                 icon: Icons.event_rounded,
-                text: DateFormat(
-                  'EEEE, d MMMM yyyy · h:mm a',
-                ).format(appointment.scheduledAt),
+                text: appointment.isWalkIn
+                    ? '${DateFormat('EEEE, d MMMM yyyy').format(appointment.scheduledAt)} · Walk-in'
+                    : DateFormat(
+                        'EEEE, d MMMM yyyy · h:mm a',
+                      ).format(appointment.scheduledAt),
               ),
               _InfoRow(
                 icon: Icons.currency_rupee_rounded,
@@ -620,7 +626,9 @@ class _ZoomActionState extends ConsumerState<_ZoomAction> {
           const SizedBox(height: 4),
           Text(
             statusText,
-            style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+            style: TextStyle(
+              color: AppColors.onSurface(context).withValues(alpha: 0.6),
+            ),
           ),
           if (_error != null) ...[
             const SizedBox(height: AppSpacing.xs),

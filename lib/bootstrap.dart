@@ -57,6 +57,11 @@ Future<void> bootstrap({AppFlavor flavor = AppFlavor.mock}) async {
 
       runApp(
         ProviderScope(
+          // Riverpod 3 silently retries failing providers for up to ~40s and
+          // reports AsyncLoading meanwhile, so screens showed an endless
+          // spinner instead of the error view. Every screen already offers
+          // an explicit Retry, so surface failures immediately.
+          retry: (_, _) => null,
           overrides: [
             appDataSourceProvider.overrideWithValue(appDataSourceFor(flavor)),
             authRepositoryProvider.overrideWithValue(

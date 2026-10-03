@@ -1,3 +1,4 @@
+import 'package:doctylia_app/core/result/result.dart';
 import 'package:doctylia_app/app/providers/repository_overrides.dart';
 import 'package:doctylia_app/core/pagination/page_request.dart';
 import 'package:doctylia_app/core/pagination/paged_state.dart';
@@ -77,7 +78,7 @@ class StaffController extends AsyncNotifier<PagedState<StaffMember>> {
       _message(() => _repo.resetPassword(id, value));
   Future<String?> delete(String id) => _mutate(() => _repo.delete(id));
 
-  Future<String?> _mutate(Future<dynamic> Function() operation) async {
+  Future<String?> _mutate<T>(Future<Result<T>> Function() operation) async {
     final result = await operation();
     final error = result.fold<String?>(
       onSuccess: (_) => null,
@@ -87,7 +88,7 @@ class StaffController extends AsyncNotifier<PagedState<StaffMember>> {
     return error;
   }
 
-  Future<String?> _message(Future<dynamic> Function() operation) async {
+  Future<String?> _message<T>(Future<Result<T>> Function() operation) async {
     final result = await operation();
     return result.fold<String?>(
       onSuccess: (_) => null,

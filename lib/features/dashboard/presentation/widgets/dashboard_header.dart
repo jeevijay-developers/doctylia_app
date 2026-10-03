@@ -53,12 +53,20 @@ class DashboardHeader extends StatelessWidget {
                   children: [
                     Icon(greeting.icon, size: 13, color: Colors.white),
                     const SizedBox(width: 5),
-                    Text(
-                      DateFormat('EEEE, MMMM d, yyyy').format(now),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
+                    // Long dates ("Wednesday, September 30, 2026") overflowed
+                    // narrow phones; shrink to fit instead.
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          DateFormat('EEEE, MMMM d, yyyy').format(now),
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                   ],

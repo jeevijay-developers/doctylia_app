@@ -15,6 +15,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
+// Theme-neutral field chrome: these helpers have no BuildContext, so they use
+// translucent colours that read correctly on both light and dark cards (a
+// near-white fill made typed text invisible in dark mode).
+final _kFieldFill = AppColors.primary.withValues(alpha: 0.05);
+const _kHairline = Color(0x338A9BB5);
+
 abstract final class _WebsiteType {
   static const sectionTitle = 14.0;
   static const subheading = 12.0;
@@ -333,7 +339,7 @@ class _PreviewCard extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: _WebsiteType.body,
-                  color: Colors.black.withOpacity(0.55),
+                  color: AppColors.onSurface(context).withValues(alpha: 0.6),
                 ),
               ),
             ],
@@ -746,7 +752,7 @@ class _HeroPortraitCard extends StatelessWidget {
               child: Container(
                 height: 150,
                 decoration: BoxDecoration(
-                  color: AppColors.primary50.withValues(alpha: 0.55),
+                  color: AppColors.primary50,
                   border: Border.all(
                     color: AppColors.primary.withValues(alpha: 0.08),
                   ),
@@ -1007,8 +1013,8 @@ class _HeroSubsectionTitle extends StatelessWidget {
         ),
         Text(
           subtitle,
-          style: const TextStyle(
-            color: AppColors.textLight,
+          style: TextStyle(
+            color: AppColors.subtleText(context),
             fontSize: _WebsiteType.label,
           ),
         ),
@@ -1034,7 +1040,7 @@ class _HeroActionsEditor extends StatelessWidget {
     decoration: BoxDecoration(
       color: Theme.of(context).cardColor,
       borderRadius: BorderRadius.circular(AppRadius.md),
-      border: Border.all(color: Colors.black.withValues(alpha: 0.055)),
+      border: Border.all(color: _kHairline),
       boxShadow: [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.025),
@@ -1139,11 +1145,11 @@ class _HeroActionsEditor extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Experience badge',
                           style: TextStyle(
                             fontSize: _WebsiteType.subheading,
@@ -1153,7 +1159,7 @@ class _HeroActionsEditor extends StatelessWidget {
                         Text(
                           'Show a trust badge on your portrait',
                           style: TextStyle(
-                            color: AppColors.textMuted,
+                            color: AppColors.mutedText(context),
                             fontSize: _WebsiteType.label,
                           ),
                         ),
@@ -1282,8 +1288,8 @@ class _HeroGroupHeader extends StatelessWidget {
             ),
             Text(
               subtitle,
-              style: const TextStyle(
-                color: AppColors.textLight,
+              style: TextStyle(
+                color: AppColors.subtleText(context),
                 fontSize: _WebsiteType.label,
               ),
             ),
@@ -1331,18 +1337,17 @@ InputDecoration _heroActionDecoration({
 }) => InputDecoration(
   labelText: label,
   labelStyle: const TextStyle(
-    color: AppColors.textMuted,
     fontSize: _WebsiteType.label,
     fontWeight: FontWeight.w700,
   ),
   prefixIcon: Icon(icon, size: 16, color: AppColors.primary),
   prefixIconConstraints: const BoxConstraints(minWidth: 37),
   filled: true,
-  fillColor: AppColors.surfaceLight,
+  fillColor: _kFieldFill,
   contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
   enabledBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(AppRadius.sm),
-    borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.065)),
+    borderSide: BorderSide(color: _kHairline),
   ),
   focusedBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -1350,7 +1355,7 @@ InputDecoration _heroActionDecoration({
   ),
   disabledBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(AppRadius.sm),
-    borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.04)),
+    borderSide: BorderSide(color: _kHairline),
   ),
 );
 
@@ -1376,12 +1381,10 @@ class _ThemeChoice extends StatelessWidget {
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: selected
-            ? color.withValues(alpha: 0.09)
-            : AppColors.surfaceLight,
+        color: selected ? color.withValues(alpha: 0.09) : _kFieldFill,
         borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(
-          color: selected ? color : Colors.black.withValues(alpha: 0.06),
+          color: selected ? color : _kHairline,
           width: selected ? 1.4 : 1,
         ),
       ),
@@ -1400,7 +1403,7 @@ class _ThemeChoice extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: selected ? color : AppColors.textMuted,
+                color: selected ? color : AppColors.mutedText(context),
                 fontSize: _WebsiteType.label,
                 fontWeight: FontWeight.w700,
               ),
@@ -1456,6 +1459,9 @@ class _QuickStatsEditor extends ConsumerWidget {
         ),
         for (final stat in s.quickStats)
           Container(
+            // Keyed so each row's text fields stay bound to their stat when
+            // another stat is deleted (initialValue fields keep their state).
+            key: ValueKey('quick-stat-${stat.id}'),
             margin: const EdgeInsets.only(bottom: AppSpacing.sm),
             padding: const EdgeInsets.all(AppSpacing.sm),
             decoration: BoxDecoration(
@@ -2106,7 +2112,7 @@ class _HoursEditor extends ConsumerWidget {
             decoration: BoxDecoration(
               color: row.isOpen
                   ? AppColors.primary.withOpacity(0.03)
-                  : Colors.black.withOpacity(0.02),
+                  : AppColors.onSurface(context).withValues(alpha: 0.03),
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Column(
@@ -2459,7 +2465,9 @@ class _ReviewsEditor extends ConsumerWidget {
         if (snapshot.reviews.isEmpty)
           Text(
             'No reviews yet.',
-            style: TextStyle(color: Colors.black.withOpacity(0.55)),
+            style: TextStyle(
+              color: AppColors.onSurface(context).withValues(alpha: 0.6),
+            ),
           )
         else
           for (final review in snapshot.reviews)
@@ -2635,19 +2643,18 @@ class _ContactEditor extends ConsumerWidget {
 InputDecoration _fieldDecoration(String label) => InputDecoration(
   labelText: label,
   labelStyle: const TextStyle(
-    color: AppColors.textMuted,
     fontSize: _WebsiteType.label,
     fontWeight: FontWeight.w600,
   ),
   filled: true,
-  fillColor: AppColors.surfaceLight,
+  fillColor: _kFieldFill,
   contentPadding: const EdgeInsets.symmetric(
     horizontal: AppSpacing.sm,
     vertical: 12,
   ),
   enabledBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(AppRadius.sm),
-    borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.065)),
+    borderSide: BorderSide(color: _kHairline),
   ),
   focusedBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -2655,7 +2662,7 @@ InputDecoration _fieldDecoration(String label) => InputDecoration(
   ),
   disabledBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(AppRadius.sm),
-    borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.04)),
+    borderSide: BorderSide(color: _kHairline),
   ),
 );
 
@@ -2725,9 +2732,9 @@ Widget _switch(String label, bool value, ValueChanged<bool>? changed) =>
       margin: const EdgeInsets.only(bottom: AppSpacing.xs),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
+        color: _kFieldFill,
         borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.055)),
+        border: Border.all(color: _kHairline),
       ),
       child: SwitchListTile(
         contentPadding: EdgeInsets.zero,
@@ -2807,7 +2814,7 @@ class _ServiceSheet extends StatefulWidget {
 class _ServiceSheetState extends State<_ServiceSheet> {
   late final name = TextEditingController(text: widget.row.name),
       description = TextEditingController(text: widget.row.description),
-      price = TextEditingController(text: '${widget.row.price}'),
+      price = TextEditingController(text: widget.row.price.toStringAsFixed(0)),
       duration = TextEditingController(text: '${widget.row.durationMinutes}');
   late String type = widget.row.type;
   @override
@@ -2906,9 +2913,9 @@ class _PackageSheet extends StatefulWidget {
 class _PackageSheetState extends State<_PackageSheet> {
   late final name = TextEditingController(text: widget.row.name),
       tagline = TextEditingController(text: widget.row.tagline),
-      price = TextEditingController(text: '${widget.row.price}'),
+      price = TextEditingController(text: widget.row.price.toStringAsFixed(0)),
       original = TextEditingController(
-        text: widget.row.originalPrice?.toString() ?? '',
+        text: widget.row.originalPrice?.toStringAsFixed(0) ?? '',
       ),
       duration = TextEditingController(text: widget.row.duration),
       features = TextEditingController(text: widget.row.features.join('\n')),

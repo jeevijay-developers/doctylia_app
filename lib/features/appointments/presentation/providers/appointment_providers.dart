@@ -199,7 +199,7 @@ class AppointmentsController extends AsyncNotifier<PagedState<Appointment>> {
         (item.patientEmail?.toLowerCase().contains(term) ?? false) ||
         item.serviceName.toLowerCase().contains(term) ||
         (item.tokenNumber?.toLowerCase().contains(term) ?? false);
-    final statusMatches = value.status == null || item.status == value.status;
+    final statusMatches = item.status.matchesFilter(value.status);
     final date = DateTime(
       item.scheduledAt.year,
       item.scheduledAt.month,

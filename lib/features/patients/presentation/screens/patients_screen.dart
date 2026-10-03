@@ -718,10 +718,14 @@ class _PatientDetailTile extends StatelessWidget {
           children: [
             Icon(icon, size: 14, color: Theme.of(context).hintColor),
             const SizedBox(width: 5),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).hintColor,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).hintColor,
+                ),
               ),
             ),
           ],

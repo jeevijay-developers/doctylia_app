@@ -61,12 +61,10 @@ void main() {
     final summary = (result as Success<AppointmentSummary>).value;
 
     expect(summary.total, 34);
+    // Web parity: "Pending" already includes confirmed bookings.
+    expect(summary.pending, greaterThanOrEqualTo(summary.confirmed));
     expect(
-      summary.pending +
-          summary.confirmed +
-          summary.completed +
-          summary.cancelled +
-          summary.noShow,
+      summary.pending + summary.completed + summary.cancelled + summary.noShow,
       summary.total,
     );
   });

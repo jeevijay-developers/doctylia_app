@@ -1,3 +1,4 @@
+import 'package:doctylia_app/features/dashboard/presentation/screens/dashboard_shell.dart';
 import 'package:doctylia_app/app/app.dart';
 import 'package:doctylia_app/app/providers/repository_overrides.dart';
 import 'package:doctylia_app/core/data/app_data_source.dart';
@@ -10,6 +11,7 @@ import 'package:doctylia_app/features/dashboard/domain/repositories/dashboard_re
 import 'package:doctylia_app/features/dashboard/presentation/providers/dashboard_providers.dart';
 import 'package:doctylia_app/shared/entitlements/plan_status.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -177,7 +179,7 @@ void main() {
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
 
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(
       find.descendant(of: bar, matching: find.byIcon(Icons.add_rounded)),
     );
@@ -206,7 +208,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(repository.loadCount, 1);
 
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(
       find.descendant(of: bar, matching: find.text('Appointments')),
     );
@@ -235,7 +237,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(NavigationRail), findsOneWidget);
-    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byKey(DashboardShell.bottomNavKey), findsNothing);
     expect(find.text('TOTAL PRACTICE REVENUE'), findsOneWidget);
   });
 
@@ -275,7 +277,7 @@ void main() {
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
 
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
     expect(find.text('ALL MODULES & SERVICES'), findsOneWidget);
@@ -300,7 +302,7 @@ void main() {
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
 
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
     expect(find.text('ALL MODULES & SERVICES'), findsOneWidget);
@@ -326,7 +328,7 @@ void main() {
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
 
-    var bar = find.byType(NavigationBar);
+    var bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(
       find.descendant(of: bar, matching: find.text('Appointments')),
     );
@@ -337,7 +339,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('TOTAL PRACTICE REVENUE'), findsOneWidget);
 
-    bar = find.byType(NavigationBar);
+    bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('Patients')));
     await tester.pumpAndSettle();
     expect(find.text('Search name or phone'), findsOneWidget);
@@ -356,7 +358,7 @@ void main() {
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
 
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(
       find.descendant(of: bar, matching: find.text('Appointments')),
     );
@@ -378,7 +380,7 @@ void main() {
     });
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
 
     await tester.tap(
       find.descendant(of: bar, matching: find.text('Appointments')),
@@ -456,7 +458,7 @@ void main() {
     });
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
 
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
@@ -518,7 +520,7 @@ void main() {
     });
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
 
     Future<void> openModule(String name) async {
       await tester.tap(find.descendant(of: bar, matching: find.text('More')));
@@ -602,7 +604,7 @@ void main() {
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
 
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
@@ -650,7 +652,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Prescriptions'));
@@ -680,7 +682,7 @@ void main() {
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
 
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Reviews'));
@@ -715,7 +717,7 @@ void main() {
     });
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
-    final bar = find.byType(NavigationBar);
+    final bar = find.byKey(DashboardShell.bottomNavKey);
 
     Future<void> openModule(String name) async {
       await tester.tap(find.descendant(of: bar, matching: find.text('More')));
@@ -739,6 +741,248 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('New Request'), findsOneWidget);
+  });
+
+  testWidgets('blog publish and unpublish update the post status', (
+    tester,
+  ) async {
+    final preferences = FakePreferencesStore({
+      'has_seen_onboarding': true,
+      'mock_doctor_session': true,
+      'mock_doctor_email': 'doctor@gmail.com',
+    });
+    await tester.pumpWidget(_testApp(preferences));
+    await tester.pumpAndSettle();
+
+    final bar = find.byKey(DashboardShell.bottomNavKey);
+    await tester.tap(find.descendant(of: bar, matching: find.text('More')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Blog'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Blog'));
+    await tester.pumpAndSettle();
+
+    final toggle = find.byWidgetPredicate(
+      (widget) =>
+          widget is Text &&
+          (widget.data == 'Publish' || widget.data == 'Unpublish'),
+    );
+    final before = (tester.widget(toggle.first) as Text).data;
+    await tester.tap(toggle.first);
+    await tester.pumpAndSettle();
+
+    final after = (tester.widget(toggle.first) as Text).data;
+    expect(after, isNot(before));
+    expect(
+      find.text(before == 'Publish' ? 'Post published.' : 'Post unpublished.'),
+      findsOneWidget,
+    );
+
+    final firstTitle = find.descendant(
+      of: find.byType(ListView).last,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Text &&
+            widget.style?.fontWeight == FontWeight.w700 &&
+            widget.data != 'Published' &&
+            widget.data != 'Draft',
+      ),
+    );
+    final deletedTitle = (tester.widget(firstTitle.first) as Text).data!;
+    await tester.tap(find.byTooltip('Delete post').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(deletedTitle), findsNothing);
+  });
+
+  testWidgets('reported dark-mode labels render with readable colours', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(420, 1600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final preferences = FakePreferencesStore({
+      'has_seen_onboarding': true,
+      'mock_doctor_session': true,
+      'mock_doctor_email': 'doctor@gmail.com',
+      'theme_mode': 'dark',
+    });
+    await tester.pumpWidget(_testApp(preferences));
+    await tester.pumpAndSettle();
+
+    // Painted colour of a text, after theme/button style resolution.
+    double luminanceOf(Finder text) {
+      final paragraph = tester.renderObject<RenderParagraph>(text.first);
+      Color? color;
+      paragraph.text.visitChildren((span) {
+        color ??= span.style?.color;
+        return color == null;
+      });
+      return (color ?? paragraph.text.style!.color!).computeLuminance();
+    }
+
+    const readable = 0.35; // Dark card is ~0.01; light-on-dark text is >0.5.
+    expect(tester.takeException(), isNull);
+    expect(luminanceOf(find.text('Check\nTomorrow')), greaterThan(readable));
+    await tester.scrollUntilVisible(
+      find.text('View site'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(luminanceOf(find.text('View site')), greaterThan(readable));
+
+    final bar = find.byKey(DashboardShell.bottomNavKey);
+    await tester.tap(find.descendant(of: bar, matching: find.text('Patients')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ananya Sharma').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open Medical Record'));
+    await tester.pumpAndSettle();
+    // Unselected tab label (#15) and an overview card label (#16).
+    expect(luminanceOf(find.text('History')), greaterThan(readable));
+    expect(luminanceOf(find.text('Known allergies')), greaterThan(readable));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('hero, quick stats and about sections edit and save', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(420, 900);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final preferences = FakePreferencesStore({
+      'has_seen_onboarding': true,
+      'mock_doctor_session': true,
+      'mock_doctor_email': 'doctor@gmail.com',
+    });
+    await tester.pumpWidget(_testApp(preferences));
+    await tester.pumpAndSettle();
+
+    final bar = find.byKey(DashboardShell.bottomNavKey);
+    await tester.tap(find.descendant(of: bar, matching: find.text('More')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My Website'));
+    await tester.pumpAndSettle();
+
+    Future<void> editAndSave({
+      required String section,
+      required Finder field,
+      required String value,
+    }) async {
+      await tester.ensureVisible(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, value);
+      await tester.pumpAndSettle();
+      final save = find.text('Save $section');
+      await tester.ensureVisible(save);
+      await tester.pumpAndSettle();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(find.text('Changes saved.'), findsOneWidget, reason: section);
+      expect(find.text(value), findsWidgets, reason: section);
+      // Let the snackbar expire before the next section.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> expand(String section) async {
+      final header = find.text(section);
+      await tester.ensureVisible(header);
+      await tester.pumpAndSettle();
+      await tester.tap(header);
+      await tester.pumpAndSettle();
+    }
+
+    // Hero Banner is expanded by default.
+    await editAndSave(
+      section: 'Hero Banner',
+      field: find.byType(TextFormField).first,
+      value: 'Caring for every family',
+    );
+
+    await expand('Quick Stats');
+    await editAndSave(
+      section: 'Quick Stats',
+      field: find.widgetWithText(TextFormField, 'Label').first,
+      value: 'Happy Patients',
+    );
+
+    await expand('About / Doctor Profile');
+    await editAndSave(
+      section: 'About / Doctor Profile',
+      field: find.widgetWithText(TextFormField, 'Qualifications'),
+      value: 'MBBS, MD (Medicine)',
+    );
+
+    // Bug #24: a newly added service must persist through Save Services.
+    await expand('Services');
+    final addService = find.text('Add service');
+    await tester.ensureVisible(addService);
+    await tester.pumpAndSettle();
+    await tester.tap(addService);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Name *'),
+      'Diabetes Review',
+    );
+    await tester.enterText(find.widgetWithText(TextField, 'Price ₹'), '750');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    final saveServices = find.text('Save Services');
+    await tester.ensureVisible(saveServices);
+    await tester.pumpAndSettle();
+    await tester.tap(saveServices);
+    await tester.pumpAndSettle();
+    expect(find.text('Changes saved.'), findsOneWidget);
+    expect(find.text('Diabetes Review'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('creates a new staff member', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(420, 900);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final preferences = FakePreferencesStore({
+      'has_seen_onboarding': true,
+      'mock_doctor_session': true,
+      'mock_doctor_email': 'doctor@gmail.com',
+    });
+    await tester.pumpWidget(_testApp(preferences));
+    await tester.pumpAndSettle();
+
+    final bar = find.byKey(DashboardShell.bottomNavKey);
+    await tester.tap(find.descendant(of: bar, matching: find.text('More')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Staff Management'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Staff Management'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add Staff'));
+    await tester.pumpAndSettle();
+    Finder field(String label) => find.widgetWithText(TextField, label);
+    await tester.enterText(field('Staff name *'), 'Reception Riya');
+    await tester.enterText(field('Username *'), 'riya.front');
+    await tester.enterText(field('Password *'), 'secret123');
+    await tester.enterText(field('Confirm password *'), 'secret123');
+    await tester.tap(find.text('Save Staff'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Save Staff'), findsNothing);
+    expect(find.text('Reception Riya'), findsOneWidget);
   });
 }
 

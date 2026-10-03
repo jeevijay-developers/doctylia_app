@@ -282,9 +282,10 @@ final class SupabasePrescriptionRepository implements PrescriptionRepository {
     if (draft.patientName.trim().isEmpty) {
       throw const ValidationFailure('Patient name is required.');
     }
-    if (draft.medicines.isEmpty ||
-        draft.medicines.every((item) => item.name.trim().isEmpty)) {
-      throw const ValidationFailure('Add at least one medicine.');
+    // Web parity: medicines are optional (legacy rows keep free-text
+    // `medications`), but every listed medicine must be named.
+    if (draft.medicines.any((item) => item.name.trim().isEmpty)) {
+      throw const ValidationFailure('Enter a medicine name for each medicine.');
     }
     if (draft.patientAge != null &&
         (draft.patientAge! < 0 || draft.patientAge! > 120)) {

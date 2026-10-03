@@ -267,7 +267,9 @@ class _AccountTab extends StatelessWidget {
             Text(
               'Account deletion is permanent and requires support '
               'verification, matching the web flow.',
-              style: TextStyle(color: Colors.black.withValues(alpha: 0.65)),
+              style: TextStyle(
+                color: AppColors.onSurface(context).withValues(alpha: 0.65),
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             SizedBox(

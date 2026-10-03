@@ -4,6 +4,17 @@ enum AppointmentPaymentStatus { pending, paid, refunded, payAtClinic }
 
 enum AppointmentType { clinic, online }
 
+extension AppointmentStatusFilter on AppointmentStatus {
+  /// Whether this status is shown under the [filter] tab. Mirrors the web,
+  /// where "Pending" counts both pending and confirmed (upcoming) bookings.
+  bool matchesFilter(AppointmentStatus? filter) => switch (filter) {
+    null => true,
+    AppointmentStatus.pending =>
+      this == AppointmentStatus.pending || this == AppointmentStatus.confirmed,
+    _ => this == filter,
+  };
+}
+
 class AppointmentSummary {
   const AppointmentSummary({
     required this.total,
@@ -43,6 +54,7 @@ class Appointment {
     this.zoomMeetingId,
     this.zoomJoinUrl,
     this.zoomStartUrl,
+    this.isWalkIn = false,
   });
   final String id;
   final String patientName;
@@ -63,6 +75,10 @@ class Appointment {
   final String? zoomMeetingId;
   final String? zoomJoinUrl;
   final String? zoomStartUrl;
+
+  /// Walk-ins are stored with a null `time_slot` (web parity); [scheduledAt]
+  /// then holds the appointment date at midnight.
+  final bool isWalkIn;
 
   Appointment copyWith({
     AppointmentStatus? status,
@@ -93,5 +109,6 @@ class Appointment {
     zoomMeetingId: zoomMeetingId ?? this.zoomMeetingId,
     zoomJoinUrl: zoomJoinUrl ?? this.zoomJoinUrl,
     zoomStartUrl: zoomStartUrl ?? this.zoomStartUrl,
+    isWalkIn: scheduledAt == null && isWalkIn,
   );
 }

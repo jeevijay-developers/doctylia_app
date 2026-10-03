@@ -118,7 +118,31 @@ class BlogPostsController extends AsyncNotifier<PagedState<BlogPost>> {
 
   Future<String?> togglePublished(String id) =>
       _mutate(() => _repo.togglePublished(id));
-  Future<String?> delete(String id) => _mutate(() => _repo.delete(id));
+  Future<String?> delete(String id) async {
+    final result = await _repo.delete(id);
+    return result.fold(
+      onSuccess: (_) {
+        // Drop the row right away; the refresh then reconciles pagination.
+        final current = state.value;
+        if (current != null) {
+          state = AsyncData(
+            PagedState(
+              items: current.items.where((item) => item.id != id).toList(),
+              nextOffset: current.nextOffset,
+              hasMore: current.hasMore,
+              totalCount: current.totalCount == null
+                  ? null
+                  : current.totalCount! - 1,
+            ),
+          );
+        }
+        unawaited(refresh());
+        return null;
+      },
+      onFailure: (failure) => failure.userMessage,
+    );
+  }
+
   Future<Result<String>> uploadCover(BlogImageUpload upload) =>
       _repo.uploadCoverImage(upload);
   Future<AiBlogDraft> generate(String topic) async {
@@ -129,7 +153,7 @@ class BlogPostsController extends AsyncNotifier<PagedState<BlogPost>> {
     );
   }
 
-  Future<String?> _mutate(Future<dynamic> Function() action) async {
+  Future<String?> _mutate<T>(Future<Result<T>> Function() action) async {
     final result = await action();
     final error = result.fold<String?>(
       onSuccess: (_) => null,

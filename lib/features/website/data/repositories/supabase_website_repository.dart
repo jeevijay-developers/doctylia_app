@@ -6,6 +6,7 @@ import 'package:doctylia_app/core/errors/repository_guard.dart';
 import 'package:doctylia_app/core/result/result.dart';
 import 'package:doctylia_app/features/website/domain/entities/website_models.dart';
 import 'package:doctylia_app/features/website/domain/repositories/website_repository.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final class SupabaseWebsiteRepository implements WebsiteRepository {
@@ -146,15 +147,7 @@ final class SupabaseWebsiteRepository implements WebsiteRepository {
           .inFilter('id', removed);
     }
     for (final row in rows) {
-      final values = {
-        'name': row.name.trim(),
-        'description': _empty(row.description),
-        'price': row.price,
-        'type': row.type,
-        'duration': row.durationMinutes,
-        'active': row.active,
-        'sort_order': row.sortOrder,
-      };
+      final values = _serviceJson(row);
       if (row.id.startsWith('new-')) {
         await _client.from('services').insert({
           'doctor_id': _doctorId,
@@ -191,18 +184,7 @@ final class SupabaseWebsiteRepository implements WebsiteRepository {
           .inFilter('id', removed);
     }
     for (final row in rows) {
-      final values = {
-        'name': row.name.trim(),
-        'tagline': _empty(row.tagline),
-        'price': row.price,
-        'original_price': row.originalPrice,
-        'duration': _empty(row.duration),
-        'features': row.features,
-        'slots_available': row.slotsAvailable,
-        'active': row.active,
-        'is_popular': row.isPopular,
-        'sort_order': row.sortOrder,
-      };
+      final values = _packageJson(row);
       if (row.id.startsWith('new-')) {
         await _client.from('packages').insert({
           'doctor_id': _doctorId,
@@ -399,6 +381,44 @@ final class SupabaseWebsiteRepository implements WebsiteRepository {
     googleAnalyticsId: row['google_analytics_id'] as String? ?? '',
   );
 
+  // Several of these columns are Postgres integers (online_fee, prices):
+  // a Dart double serialises as "500.0" and PostgREST rejects the whole
+  // update with 22P02, which surfaced as "Something went wrong".
+  @visibleForTesting
+  static Map<String, dynamic> settingsJson(WebsiteSettings s) =>
+      _settingsJson(s);
+
+  @visibleForTesting
+  static Map<String, dynamic> serviceJson(WebsiteService row) =>
+      _serviceJson(row);
+
+  @visibleForTesting
+  static Map<String, dynamic> packageJson(WebsitePackage row) =>
+      _packageJson(row);
+
+  static Map<String, dynamic> _serviceJson(WebsiteService row) => {
+    'name': row.name.trim(),
+    'description': _empty(row.description),
+    'price': row.price.round(),
+    'type': row.type,
+    'duration': row.durationMinutes,
+    'active': row.active,
+    'sort_order': row.sortOrder,
+  };
+
+  static Map<String, dynamic> _packageJson(WebsitePackage row) => {
+    'name': row.name.trim(),
+    'tagline': _empty(row.tagline),
+    'price': row.price.round(),
+    'original_price': row.originalPrice?.round(),
+    'duration': _empty(row.duration),
+    'features': row.features,
+    'slots_available': row.slotsAvailable,
+    'active': row.active,
+    'is_popular': row.isPopular,
+    'sort_order': row.sortOrder,
+  };
+
   static Map<String, dynamic> _settingsJson(WebsiteSettings s) => {
     'hero_headline_line1': s.heroHeadlineLine1,
     'hero_headline_line2': s.heroHeadlineLine2,
@@ -428,7 +448,7 @@ final class SupabaseWebsiteRepository implements WebsiteRepository {
     'auto_confirm': s.autoConfirm,
     'buffer_minutes': s.bufferMinutes,
     'require_payment': s.requirePayment,
-    'online_fee': s.onlineFee,
+    'online_fee': s.onlineFee.round(),
     'online_duration': s.onlineDuration,
     'video_provider': s.videoProvider,
     'whatsapp_number': _empty(s.whatsappNumber),
@@ -632,6 +652,16 @@ final class SupabaseWebsiteRepository implements WebsiteRepository {
           }
           if (error is PostgrestException && error.code == '42501') {
             throw const PermissionFailure();
+          }
+          if (text.contains('online_consultation_requires_premium')) {
+            throw const PlanRestrictedFailure('online consultation');
+          }
+          if (error is PostgrestException &&
+              const {'22P02', '23502', '23514'}.contains(error.code)) {
+            throw const ValidationFailure(
+              'One of the values in this section is not valid. '
+              'Please check numbers and required fields.',
+            );
           }
           throw ServerFailure(cause: error, stackTrace: stackTrace);
         }

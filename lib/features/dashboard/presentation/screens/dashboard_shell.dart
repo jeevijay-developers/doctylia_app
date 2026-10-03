@@ -15,6 +15,9 @@ class DashboardShell extends ConsumerWidget {
   const DashboardShell({required this.child, super.key});
   final Widget child;
 
+  /// Identifies the phone bottom navigation bar (used by widget tests).
+  static const bottomNavKey = ValueKey('dashboard-bottom-nav');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).matchedLocation;
@@ -229,6 +232,10 @@ class _IconChip extends StatelessWidget {
 
 /// Bottom navigation presented as a floating rounded card with a soft
 /// shadow, rather than an edge-to-edge flat bar.
+///
+/// Custom instead of [NavigationBar] because Material's label is an
+/// unconstrained `Text` that wraps "Appointments" onto two lines on phones;
+/// here every label stays on one line and scales down only if it must.
 class _FloatingNavBar extends StatelessWidget {
   const _FloatingNavBar({
     required this.selected,
@@ -240,10 +247,46 @@ class _FloatingNavBar extends StatelessWidget {
   final ValueChanged<int> onDestinationSelected;
   final VoidCallback onCreate;
 
+  static const _items = [
+    (
+      label: 'Home',
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home_rounded,
+    ),
+    (
+      label: 'Appointments',
+      icon: Icons.calendar_today_outlined,
+      selectedIcon: Icons.calendar_month_rounded,
+    ),
+    (
+      label: 'Patients',
+      icon: Icons.people_outline_rounded,
+      selectedIcon: Icons.people_rounded,
+    ),
+    (
+      label: 'More',
+      icon: Icons.grid_view_outlined,
+      selectedIcon: Icons.grid_view_rounded,
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final visualIndex = selected < 2 ? selected : selected + 1;
+    Widget item(int index) {
+      final entry = _items[index];
+      return Expanded(
+        child: _NavBarItem(
+          label: entry.label,
+          icon: entry.icon,
+          selectedIcon: entry.selectedIcon,
+          selected: selected == index,
+          onTap: () => onDestinationSelected(index),
+        ),
+      );
+    }
+
     return Container(
+      key: DashboardShell.bottomNavKey,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: const BorderRadius.only(
@@ -259,113 +302,130 @@ class _FloatingNavBar extends StatelessWidget {
         ],
         border: Border(top: BorderSide(color: AppColors.border(context))),
       ),
-      child: NavigationBar(
-        height: 76,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        indicatorColor: AppColors.primary.withValues(alpha: 0.1),
-        selectedIndex: visualIndex,
-        onDestinationSelected: (index) {
-          if (index == 2) {
-            onCreate();
-            return;
-          }
-          onDestinationSelected(index > 2 ? index - 1 : index);
-        },
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          final isSelected = states.contains(WidgetState.selected);
-          return TextStyle(
-            fontSize: 11.5,
-            height: 1.05,
-            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-            color: isSelected ? AppColors.primary : const Color(0xFF9AAAC0),
-          );
-        }),
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.home_outlined, size: 23, color: Color(0xFF9AAAC0)),
-            selectedIcon: Icon(
-              Icons.home_rounded,
-              size: 23,
-              color: AppColors.primary,
-            ),
-            label: 'Home',
-          ),
-          const NavigationDestination(
-            icon: Icon(
-              Icons.calendar_today_outlined,
-              size: 23,
-              color: Color(0xFF9AAAC0),
-            ),
-            selectedIcon: Icon(
-              Icons.calendar_month_rounded,
-              size: 23,
-              color: AppColors.primary,
-            ),
-            label: 'Appointments',
-          ),
-          NavigationDestination(
-            icon: Semantics(
-              label: 'Add appointment',
-              button: true,
-              child: Transform.translate(
-                offset: const Offset(0, -10),
-                child: Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primary,
-                    border: Border.all(color: Colors.white, width: 3),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.28),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 76,
+          child: Row(
+            children: [
+              item(0),
+              item(1),
+              Expanded(
+                child: Center(
+                  child: Semantics(
+                    label: 'Add appointment',
+                    button: true,
+                    child: GestureDetector(
+                      onTap: onCreate,
+                      child: Transform.translate(
+                        offset: const Offset(0, -10),
+                        child: Container(
+                          width: 58,
+                          height: 58,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.primary,
+                            border: Border.all(color: Colors.white, width: 3),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.28,
+                                ),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.add_rounded,
+                            size: 32,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.add_rounded,
-                    size: 32,
-                    color: Colors.white,
+                    ),
                   ),
                 ),
               ),
-            ),
-            label: '',
+              item(2),
+              item(3),
+            ],
           ),
-          const NavigationDestination(
-            icon: Icon(
-              Icons.people_outline_rounded,
-              size: 23,
-              color: Color(0xFF9AAAC0),
-            ),
-            selectedIcon: Icon(
-              Icons.people_rounded,
-              size: 23,
-              color: AppColors.primary,
-            ),
-            label: 'Patients',
-          ),
-          const NavigationDestination(
-            icon: Icon(
-              Icons.grid_view_outlined,
-              size: 23,
-              color: Color(0xFF9AAAC0),
-            ),
-            selectedIcon: Icon(
-              Icons.grid_view_rounded,
-              size: 23,
-              color: AppColors.primary,
-            ),
-            label: 'More',
-          ),
-        ],
+        ),
       ),
     );
   }
+}
+
+class _NavBarItem extends StatelessWidget {
+  const _NavBarItem({
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  static const _inactive = Color(0xFF9AAAC0);
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    selected: selected,
+    button: true,
+    label: label,
+    excludeSemantics: true,
+    child: InkWell(
+      onTap: onTap,
+      customBorder: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 56,
+            height: 30,
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.primary.withValues(alpha: 0.1)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Icon(
+              selected ? selectedIcon : icon,
+              size: 23,
+              color: selected ? AppColors.primary : _inactive,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  height: 1.05,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  color: selected ? AppColors.primary : _inactive,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ProfileDrawer extends ConsumerWidget {
