@@ -4,22 +4,13 @@ import 'package:doctylia_app/core/errors/app_failure.dart';
 import 'package:doctylia_app/features/appointments/domain/entities/appointment.dart';
 import 'package:doctylia_app/features/appointments/domain/entities/appointment_query.dart';
 import 'package:doctylia_app/features/appointments/presentation/providers/appointment_providers.dart';
+import 'package:doctylia_app/features/appointments/presentation/widgets/appointment_ui.dart';
 import 'package:doctylia_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:doctylia_app/features/dashboard/presentation/widgets/dashboard_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-
-InputDecoration _fieldDecoration(String label, {String? prefixText}) =>
-    InputDecoration(
-      labelText: label,
-      prefixText: prefixText,
-      filled: true,
-      fillColor: AppColors.primary.withValues(alpha: 0.035),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        borderSide: BorderSide.none,
-      ),
-    );
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
 Future<void> showAppointmentForm(
   BuildContext context,
@@ -29,8 +20,13 @@ Future<void> showAppointmentForm(
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
-  showDragHandle: true,
-  builder: (_) => _AppointmentForm(appointment: appointment, walkIn: walkIn),
+  useSafeArea: true,
+  constraints: appointmentSheetConstraints(context),
+  shape: appointmentSheetShape,
+  clipBehavior: Clip.antiAlias,
+  builder: (_) => DashboardShadcnScope(
+    child: _AppointmentForm(appointment: appointment, walkIn: walkIn),
+  ),
 );
 
 class _AppointmentForm extends ConsumerStatefulWidget {
@@ -106,245 +102,435 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
     super.dispose();
   }
 
+  InputDecoration _field(
+    String label, {
+    String? hint,
+    String? prefixText,
+    IconData? icon,
+  }) => appointmentFieldDecoration(
+    context,
+    label,
+    hint: hint,
+    prefixText: prefixText,
+    icon: icon,
+  );
+
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Padding(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        0,
-        AppSpacing.lg,
-        MediaQuery.viewInsetsOf(context).bottom + AppSpacing.lg,
-      ),
-      child: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                    ),
-                    child: const Icon(
-                      Icons.event_available_rounded,
-                      size: 18,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    widget.appointment == null
-                        ? 'Add Appointment'
-                        : 'Edit Appointment',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextFormField(
-                controller: _name,
-                decoration: _fieldDecoration('Patient name *'),
-                validator: _required,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextFormField(
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                decoration: _fieldDecoration('Phone number *'),
-                validator: (value) {
-                  final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
-                  return digits.length == 10 ||
-                          (digits.length == 12 && digits.startsWith('91'))
-                      ? null
-                      : 'Enter a valid 10-digit Indian phone number';
-                },
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _age,
-                      keyboardType: TextInputType.number,
-                      decoration: _fieldDecoration('Age'),
-                      validator: (value) {
-                        final text = (value ?? '').trim();
-                        if (text.isEmpty) return null;
-                        final age = int.tryParse(text);
-                        return age != null && age >= 0 && age <= 120
-                            ? null
-                            : 'Enter an age from 0 to 120';
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _gender,
-                      decoration: _fieldDecoration('Gender'),
-                      items: const [
-                        DropdownMenuItem(value: 'male', child: Text('Male')),
-                        DropdownMenuItem(
-                          value: 'female',
-                          child: Text('Female'),
+  Widget build(BuildContext context) {
+    final isNew = widget.appointment == null;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Pinned header ──────────────────────────────────────────────
+          const SheetHandle(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.sm,
+              AppSpacing.sm,
+            ),
+            child: Row(
+              children: [
+                const DashboardIconTile(
+                  icon: Icons.event_available_rounded,
+                  color: DashboardTokens.teal,
+                  size: 42,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isNew ? 'Book Appointment' : 'Edit Appointment',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
                         ),
-                        DropdownMenuItem(value: 'other', child: Text('Other')),
-                      ],
-                      onChanged: (value) => _gender = value,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextFormField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: _fieldDecoration('Email'),
-                validator: (value) {
-                  final email = (value ?? '').trim();
-                  if (email.isEmpty) return null;
-                  return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)
-                      ? null
-                      : 'Enter a valid email address';
-                },
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextFormField(
-                controller: _service,
-                decoration: _fieldDecoration('Service'),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<AppointmentType>(
-                      initialValue: _type,
-                      decoration: _fieldDecoration('Visit type'),
-                      items: const [
-                        DropdownMenuItem(
-                          value: AppointmentType.clinic,
-                          child: Text('Clinic'),
-                        ),
-                        DropdownMenuItem(
-                          value: AppointmentType.online,
-                          child: Text('Online'),
-                        ),
-                      ],
-                      onChanged: (value) => setState(() => _type = value!),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _amount,
-                      keyboardType: TextInputType.number,
-                      decoration: _fieldDecoration('Amount', prefixText: '₹ '),
-                      validator: (value) =>
-                          (double.tryParse(value ?? '') ?? 0) < 0
-                          ? 'Cannot be negative'
-                          : null,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              DropdownButtonFormField<AppointmentPaymentStatus>(
-                initialValue: _paymentStatus,
-                decoration: _fieldDecoration('Payment status'),
-                items: AppointmentPaymentStatus.values
-                    .map(
-                      (status) => DropdownMenuItem(
-                        value: status,
-                        child: Text(_paymentLabel(status)),
                       ),
-                    )
-                    .toList(),
-                onChanged: (value) => _paymentStatus = value!,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                activeTrackColor: AppColors.primary,
-                title: const Text('Walk-in'),
-                subtitle: const Text('No fixed time slot'),
-                value: _walkIn,
-                onChanged: (value) => setState(() {
-                  _walkIn = value;
-                  if (!value) {
-                    // Keep the chosen day but give it a bookable time.
-                    final next = _nextQuarterHour(DateTime.now());
-                    final onDay = DateTime(
-                      _scheduled.year,
-                      _scheduled.month,
-                      _scheduled.day,
-                      next.hour,
-                      next.minute,
-                    );
-                    _scheduled = onDay.isBefore(next) ? next : onDay;
-                  }
-                }),
-              ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: BorderSide(
-                    color: AppColors.primary.withValues(alpha: 0.4),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                      Text(
+                        isNew
+                            ? 'Schedule a visit for a new or returning patient'
+                            : 'Update the visit details and schedule',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.mutedText(context),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                onPressed: _pickDateTime,
-                icon: const Icon(Icons.event_rounded),
-                label: Text(
-                  _walkIn
-                      ? '${DateFormat('d MMM yyyy').format(_scheduled)} · Walk-in'
-                      : DateFormat('d MMM yyyy · h:mm a').format(_scheduled),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextFormField(
-                controller: _complaint,
-                decoration: _fieldDecoration('Chief complaint'),
-                maxLines: 2,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextFormField(
-                controller: _notes,
-                decoration: _fieldDecoration('Notes'),
-                maxLines: 3,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                  ),
-                ),
-                onPressed: _saving ? null : _submit,
-                child: Text(
-                  _saving
-                      ? 'Saving...'
-                      : widget.appointment == null
-                      ? 'Add appointment'
-                      : 'Save changes',
-                ),
-              ),
-            ],
+                const SheetCloseButton(),
+              ],
+            ),
           ),
-        ),
+          shadcn.Divider(color: DashboardTokens.border(context)),
+          // ── Scrollable sectioned body ─────────────────────────────────
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _FormSection(
+                      step: 1,
+                      icon: Icons.person_outline_rounded,
+                      title: 'Patient',
+                      subtitle: 'Who is the appointment for?',
+                      children: [
+                        TextFormField(
+                          controller: _name,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: _field(
+                            'Patient name *',
+                            hint: 'e.g. Ananya Sharma',
+                            icon: Icons.badge_outlined,
+                          ),
+                          validator: _required,
+                        ),
+                        TextFormField(
+                          controller: _phone,
+                          keyboardType: TextInputType.phone,
+                          decoration: _field(
+                            'Phone number *',
+                            hint: '10-digit mobile number',
+                            icon: Icons.phone_outlined,
+                          ),
+                          validator: (value) {
+                            final digits = (value ?? '').replaceAll(
+                              RegExp(r'\D'),
+                              '',
+                            );
+                            return digits.length == 10 ||
+                                    (digits.length == 12 &&
+                                        digits.startsWith('91'))
+                                ? null
+                                : 'Enter a valid 10-digit Indian phone number';
+                          },
+                        ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 92,
+                              child: TextFormField(
+                                controller: _age,
+                                keyboardType: TextInputType.number,
+                                decoration: _field('Age', hint: 'Years'),
+                                validator: (value) {
+                                  final text = (value ?? '').trim();
+                                  if (text.isEmpty) return null;
+                                  final age = int.tryParse(text);
+                                  return age != null && age >= 0 && age <= 120
+                                      ? null
+                                      : 'Enter an age from 0 to 120';
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _email,
+                                keyboardType: TextInputType.emailAddress,
+                                decoration: _field(
+                                  'Email',
+                                  hint: 'name@example.com',
+                                ),
+                                validator: (value) {
+                                  final email = (value ?? '').trim();
+                                  if (email.isEmpty) return null;
+                                  return RegExp(
+                                        r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                                      ).hasMatch(email)
+                                      ? null
+                                      : 'Enter a valid email address';
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        _LabeledPills(
+                          label: 'Gender',
+                          child: ChoicePills<String>(
+                            options: const ['male', 'female', 'other'],
+                            value: _gender,
+                            labelOf: (value) => switch (value) {
+                              'male' => 'Male',
+                              'female' => 'Female',
+                              _ => 'Other',
+                            },
+                            onChanged: (value) =>
+                                setState(() => _gender = value),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _FormSection(
+                      step: 2,
+                      icon: Icons.calendar_month_outlined,
+                      title: 'Schedule',
+                      subtitle: 'Pick a slot or mark as a walk-in',
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Walk-in',
+                                    style: TextStyle(
+                                      color: AppColors.onSurface(context),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    'No fixed time slot',
+                                    style: TextStyle(
+                                      color: AppColors.mutedText(context),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            shadcn.Switch(
+                              value: _walkIn,
+                              activeColor: DashboardTokens.teal,
+                              onChanged: (value) => setState(() {
+                                _walkIn = value;
+                                if (!value) {
+                                  // Keep the chosen day but give it a
+                                  // bookable time.
+                                  final next = _nextQuarterHour(DateTime.now());
+                                  final onDay = DateTime(
+                                    _scheduled.year,
+                                    _scheduled.month,
+                                    _scheduled.day,
+                                    next.hour,
+                                    next.minute,
+                                  );
+                                  _scheduled = onDay.isBefore(next)
+                                      ? next
+                                      : onDay;
+                                }
+                              }),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _SlotTile(
+                                icon: Icons.calendar_today_rounded,
+                                label: 'Date',
+                                value: DateFormat(
+                                  'EEE, d MMM yyyy',
+                                ).format(_scheduled),
+                                onTap: _pickDateTime,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: _SlotTile(
+                                icon: Icons.schedule_rounded,
+                                label: 'Time',
+                                value: _walkIn
+                                    ? 'Walk-in'
+                                    : DateFormat('h:mm a').format(_scheduled),
+                                onTap: _pickDateTime,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _FormSection(
+                      step: 3,
+                      icon: Icons.medical_services_outlined,
+                      title: 'Appointment details',
+                      subtitle: 'Visit type, fee and clinical notes',
+                      children: [
+                        TextFormField(
+                          controller: _service,
+                          decoration: _field(
+                            'Service',
+                            hint: 'e.g. Consultation',
+                            icon: Icons.medical_information_outlined,
+                          ),
+                        ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _LabeledPills(
+                                label: 'Visit type',
+                                child: ChoicePills<AppointmentType>(
+                                  options: const [
+                                    AppointmentType.clinic,
+                                    AppointmentType.online,
+                                  ],
+                                  value: _type,
+                                  labelOf: (value) =>
+                                      value == AppointmentType.clinic
+                                      ? 'Clinic'
+                                      : 'Online',
+                                  iconOf: (value) =>
+                                      value == AppointmentType.clinic
+                                      ? Icons.local_hospital_outlined
+                                      : Icons.videocam_outlined,
+                                  onChanged: (value) =>
+                                      setState(() => _type = value),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            SizedBox(
+                              width: 112,
+                              child: TextFormField(
+                                controller: _amount,
+                                keyboardType: TextInputType.number,
+                                decoration: _field('Amount', prefixText: '₹ '),
+                                validator: (value) =>
+                                    (double.tryParse(value ?? '') ?? 0) < 0
+                                    ? 'Cannot be negative'
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        _LabeledPills(
+                          label: 'Payment status',
+                          child: ChoicePills<AppointmentPaymentStatus>(
+                            options: AppointmentPaymentStatus.values,
+                            value: _paymentStatus,
+                            labelOf: appointmentPaymentLabel,
+                            colorOf: appointmentPaymentColor,
+                            onChanged: (value) =>
+                                setState(() => _paymentStatus = value),
+                          ),
+                        ),
+                        TextFormField(
+                          controller: _complaint,
+                          decoration: _field(
+                            'Chief complaint',
+                            hint: 'Reason for visit',
+                          ),
+                          maxLines: 2,
+                          buildCounter: _characterCount,
+                        ),
+                        TextFormField(
+                          controller: _notes,
+                          decoration: _field(
+                            'Notes',
+                            hint: 'Anything the team should know',
+                          ),
+                          maxLines: 3,
+                          buildCounter: _characterCount,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // ── Pinned action bar ─────────────────────────────────────────
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              border: Border(
+                top: BorderSide(color: DashboardTokens.border(context)),
+              ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      height: 48,
+                      child: shadcn.OutlineButton(
+                        alignment: Alignment.center,
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.of(context).maybePop(),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: shadcn.PrimaryButton(
+                          alignment: Alignment.center,
+                          onPressed: _saving ? null : _submit,
+                          leading: _saving
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Icon(
+                                  isNew
+                                      ? Icons.add_rounded
+                                      : Icons.check_rounded,
+                                  size: 18,
+                                ),
+                          child: Text(
+                            _saving
+                                ? 'Saving...'
+                                : isNew
+                                ? 'Add appointment'
+                                : 'Save changes',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
-    ),
+    );
+  }
+
+  /// Display-only character count; no `maxLength`, so input is never capped.
+  Widget? _characterCount(
+    BuildContext context, {
+    required int currentLength,
+    required bool isFocused,
+    required int? maxLength,
+  }) => Text(
+    '$currentLength characters',
+    style: TextStyle(color: AppColors.subtleText(context), fontSize: 11),
   );
 
   String? _required(String? value) =>
@@ -443,12 +629,198 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
       ).showSnackBar(SnackBar(content: Text(error)));
     }
   }
+}
 
-  static String _paymentLabel(AppointmentPaymentStatus status) =>
-      switch (status) {
-        AppointmentPaymentStatus.pending => 'Pending',
-        AppointmentPaymentStatus.paid => 'Paid',
-        AppointmentPaymentStatus.refunded => 'Refunded',
-        AppointmentPaymentStatus.payAtClinic => 'Pay at clinic',
-      };
+/// Card-style group of related form fields with a numbered header.
+class _FormSection extends StatelessWidget {
+  const _FormSection({
+    required this.step,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+  });
+
+  final int step;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: AppColors.isDark(context) ? AppColors.darkCard : AppColors.card,
+      borderRadius: BorderRadius.circular(DashboardTokens.radius),
+      border: Border.all(color: DashboardTokens.border(context)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            color: AppColors.secondarySurface(context).withValues(alpha: 0.5),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(DashboardTokens.radius),
+            ),
+            border: Border(
+              bottom: BorderSide(color: DashboardTokens.border(context)),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: DashboardTokens.teal.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$step',
+                  style: const TextStyle(
+                    color: DashboardTokens.tealDeep,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: AppColors.onSurface(context),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.mutedText(context),
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(icon, size: 18, color: AppColors.subtleText(context)),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(height: AppSpacing.sm),
+                children[i],
+              ],
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _LabeledPills extends StatelessWidget {
+  const _LabeledPills({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          color: AppColors.mutedText(context),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      const SizedBox(height: 6),
+      child,
+    ],
+  );
+}
+
+/// A tappable date/time slot that opens the picker.
+class _SlotTile extends StatelessWidget {
+  const _SlotTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(DashboardTokens.innerRadius);
+    return Material(
+      color: DashboardTokens.teal.withValues(alpha: 0.06),
+      borderRadius: radius,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: Ink(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            border: Border.all(
+              color: DashboardTokens.teal.withValues(alpha: 0.28),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: DashboardTokens.tealDeep),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: AppColors.mutedText(context),
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.onSurface(context),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

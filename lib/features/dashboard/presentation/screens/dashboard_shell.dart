@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/core/theme/theme_mode_provider.dart';
@@ -6,10 +8,15 @@ import 'package:doctylia_app/app/router/route_names.dart';
 import 'package:doctylia_app/features/auth/presentation/providers/auth_providers.dart';
 import 'package:doctylia_app/features/appointments/presentation/widgets/appointment_form_sheet.dart';
 import 'package:doctylia_app/features/dashboard/presentation/navigation/dashboard_destination.dart';
+import 'package:doctylia_app/features/dashboard/presentation/widgets/dashboard_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
+
+/// Neutral slate used for inactive navigation icons and labels.
+const _inactiveNav = Color(0xFF8A99B0);
 
 class DashboardShell extends ConsumerWidget {
   const DashboardShell({required this.child, super.key});
@@ -23,13 +30,26 @@ class DashboardShell extends ConsumerWidget {
     final location = GoRouterState.of(context).matchedLocation;
     final selected = dashboardDestinationIndex(location);
     final name = ref.watch(authControllerProvider).value?.session?.displayName;
+    final isDark = AppColors.isDark(context);
     final appBar = AppBar(
       automaticallyImplyLeading: false,
       elevation: 0,
-      scrolledUnderElevation: 1,
+      scrolledUnderElevation: 0,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.black.withValues(alpha: 0.06),
-      title: const DoctyliaLogo(width: 140, height: 44),
+      systemOverlayStyle: isDark
+          ? SystemUiOverlayStyle.light.copyWith(
+              statusBarColor: Colors.transparent,
+            )
+          : SystemUiOverlayStyle.dark.copyWith(
+              statusBarColor: Colors.transparent,
+            ),
+      titleSpacing: AppSpacing.md,
+      title: const DoctyliaLogo(width: 132, height: 42),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(height: 1, color: DashboardTokens.border(context)),
+      ),
       actions: [
         _IconChip(
           icon: Icons.notifications_none_rounded,
@@ -38,31 +58,23 @@ class DashboardShell extends ConsumerWidget {
         ),
         const SizedBox(width: AppSpacing.xs),
         Padding(
-          padding: const EdgeInsets.only(right: AppSpacing.sm),
+          padding: const EdgeInsets.only(right: AppSpacing.md),
           child: Builder(
             builder: (buttonContext) => Tooltip(
               message: 'Profile menu',
               child: InkWell(
                 onTap: () => Scaffold.of(buttonContext).openEndDrawer(),
-                customBorder: const CircleBorder(),
+                borderRadius: BorderRadius.circular(14),
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.25),
+                      color: AppColors.primary.withValues(alpha: 0.3),
                       width: 1.5,
                     ),
                   ),
-                  child: CircleAvatar(
-                    radius: 16,
-                    backgroundColor: AppColors.primary100,
-                    foregroundColor: AppColors.primary600,
-                    child: Text(
-                      _initial(name),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
+                  child: _ProfileAvatar(name: name, size: 32),
                 ),
               ),
             ),
@@ -70,27 +82,29 @@ class DashboardShell extends ConsumerWidget {
         ),
       ],
     );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth >= 840) {
+    return DashboardShadcnScope(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= 840) {
+            return _KeyboardBackScope(
+              child: _wideScaffold(context, ref, appBar, selected, name),
+            );
+          }
           return _KeyboardBackScope(
-            child: _wideScaffold(context, ref, appBar, selected, name),
-          );
-        }
-        return _KeyboardBackScope(
-          child: Scaffold(
-            appBar: appBar,
-            endDrawer: _ProfileDrawer(name: name),
-            body: child,
-            bottomNavigationBar: _FloatingNavBar(
-              selected: selected,
-              onDestinationSelected: (index) =>
-                  context.go(dashboardDestinations[index].path),
-              onCreate: () => showAppointmentForm(context, ref),
+            child: Scaffold(
+              appBar: appBar,
+              endDrawer: _ProfileDrawer(name: name),
+              body: child,
+              bottomNavigationBar: _FloatingNavBar(
+                selected: selected,
+                onDestinationSelected: (index) =>
+                    context.go(dashboardDestinations[index].path),
+                onCreate: () => showAppointmentForm(context, ref),
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -101,6 +115,9 @@ class DashboardShell extends ConsumerWidget {
     int selected,
     String? name,
   ) {
+    final railSurface = AppColors.isDark(context)
+        ? AppColors.darkCard
+        : AppColors.card;
     return Scaffold(
       appBar: appBar,
       endDrawer: _ProfileDrawer(name: name),
@@ -109,18 +126,30 @@ class DashboardShell extends ConsumerWidget {
           NavigationRail(
             selectedIndex: selected,
             labelType: NavigationRailLabelType.all,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            indicatorColor: AppColors.primary.withValues(alpha: 0.14),
+            minWidth: 88,
+            groupAlignment: -0.9,
+            backgroundColor: railSurface,
+            indicatorColor: AppColors.primary.withValues(alpha: 0.12),
             indicatorShape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
-            selectedIconTheme: const IconThemeData(color: AppColors.primary),
+            selectedIconTheme: const IconThemeData(
+              color: AppColors.primary,
+              size: 22,
+            ),
+            unselectedIconTheme: const IconThemeData(
+              color: _inactiveNav,
+              size: 22,
+            ),
             selectedLabelTextStyle: const TextStyle(
               color: AppColors.primary,
+              fontSize: 11.5,
               fontWeight: FontWeight.w700,
             ),
-            unselectedLabelTextStyle: TextStyle(
-              color: AppColors.mutedText(context),
+            unselectedLabelTextStyle: const TextStyle(
+              color: _inactiveNav,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
             ),
             onDestinationSelected: (index) =>
                 context.go(dashboardDestinations[index].path),
@@ -139,6 +168,7 @@ class DashboardShell extends ConsumerWidget {
                   child: _IconChip(
                     icon: Icons.logout_rounded,
                     tooltip: 'Log out',
+                    color: AppColors.destructive,
                     onPressed: () => confirmLogout(context, ref),
                   ),
                 ),
@@ -150,10 +180,11 @@ class DashboardShell extends ConsumerWidget {
                   icon: Icon(item.icon),
                   selectedIcon: Icon(item.selectedIcon),
                   label: Text(item.label),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                 ),
             ],
           ),
-          VerticalDivider(width: 1, color: AppColors.border(context)),
+          Container(width: 1, color: DashboardTokens.border(context)),
           Expanded(child: child),
         ],
       ),
@@ -200,38 +231,78 @@ class DashboardShell extends ConsumerWidget {
   }
 }
 
-/// A small tinted-circle icon button — the "modern icon" treatment used
-/// consistently across the app instead of a bare IconButton.
+/// shadcn [shadcn.Avatar] showing the doctor's initial.
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({required this.name, required this.size});
+
+  final String? name;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => shadcn.Avatar(
+    initials: DashboardShell._initial(name),
+    size: size,
+    borderRadius: size * 0.34,
+    backgroundColor: AppColors.isDark(context)
+        ? AppColors.primary.withValues(alpha: 0.2)
+        : AppColors.primary100,
+    theme: shadcn.AvatarTheme(
+      textStyle: TextStyle(
+        color: AppColors.isDark(context)
+            ? AppColors.primary400
+            : AppColors.primary600,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+}
+
+/// A small bordered, rounded-square icon button — the shadcn "outline icon
+/// button" look, kept on Material ink so it carries a [Tooltip].
 class _IconChip extends StatelessWidget {
-  const _IconChip({required this.icon, required this.onPressed, this.tooltip});
+  const _IconChip({
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+    this.color,
+  });
 
   final IconData icon;
   final VoidCallback onPressed;
   final String? tooltip;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(12);
     return Tooltip(
       message: tooltip ?? '',
-      child: InkWell(
-        onTap: onPressed,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.primary.withValues(alpha: 0.08),
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: radius,
+          child: Ink(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(color: DashboardTokens.border(context)),
+            ),
+            child: Icon(
+              icon,
+              size: 19,
+              color: color ?? AppColors.onSurface(context),
+            ),
           ),
-          child: Icon(icon, size: 20, color: AppColors.primary),
         ),
       ),
     );
   }
 }
 
-/// Bottom navigation presented as a floating rounded card with a soft
-/// shadow, rather than an edge-to-edge flat bar.
+/// Bottom navigation presented as a floating, frosted, bordered card.
 ///
 /// Custom instead of [NavigationBar] because Material's label is an
 /// unconstrained `Text` that wraps "Appointments" onto two lines on phones;
@@ -285,71 +356,94 @@ class _FloatingNavBar extends StatelessWidget {
       );
     }
 
-    return Container(
+    final isDark = AppColors.isDark(context);
+    final surface = isDark ? AppColors.darkCard : AppColors.card;
+    final radius = BorderRadius.circular(22);
+    return SafeArea(
       key: DashboardShell.bottomNavKey,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(AppRadius.lg),
-          topRight: Radius.circular(AppRadius.lg),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1D4ED8).withValues(alpha: 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, -4),
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            boxShadow: [
+              BoxShadow(
+                color: DashboardTokens.blueDeep.withValues(
+                  alpha: isDark ? 0.25 : 0.1,
+                ),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-        ],
-        border: Border(top: BorderSide(color: AppColors.border(context))),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 76,
-          child: Row(
-            children: [
-              item(0),
-              item(1),
-              Expanded(
-                child: Center(
-                  child: Semantics(
-                    label: 'Add appointment',
-                    button: true,
-                    child: GestureDetector(
-                      onTap: onCreate,
-                      child: Transform.translate(
-                        offset: const Offset(0, -10),
-                        child: Container(
-                          width: 58,
-                          height: 58,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.primary,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primary.withValues(
-                                  alpha: 0.28,
-                                ),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.add_rounded,
-                            size: 32,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
+          child: ClipRRect(
+            borderRadius: radius,
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              child: Container(
+                height: 68,
+                decoration: BoxDecoration(
+                  color: surface.withValues(alpha: 0.92),
+                  borderRadius: radius,
+                  border: Border.all(color: DashboardTokens.border(context)),
+                ),
+                child: Row(
+                  children: [
+                    item(0),
+                    item(1),
+                    Expanded(
+                      child: Center(child: _CreateButton(onTap: onCreate)),
                     ),
-                  ),
+                    item(2),
+                    item(3),
+                  ],
                 ),
               ),
-              item(2),
-              item(3),
-            ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CreateButton extends StatelessWidget {
+  const _CreateButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(16);
+    return Semantics(
+      label: 'Add appointment',
+      button: true,
+      child: Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.primary600, DashboardTokens.teal],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.32),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: radius,
+            child: const Icon(Icons.add_rounded, size: 28, color: Colors.white),
           ),
         ),
       ),
@@ -372,60 +466,79 @@ class _NavBarItem extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  static const _inactive = Color(0xFF9AAAC0);
+  static const _duration = Duration(milliseconds: 200);
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    selected: selected,
-    button: true,
-    label: label,
-    excludeSemantics: true,
-    child: InkWell(
-      onTap: onTap,
-      customBorder: RoundedRectangleBorder(
+  Widget build(BuildContext context) {
+    final activeColor = AppColors.isDark(context)
+        ? AppColors.primary400
+        : AppColors.primary600;
+    final color = selected ? activeColor : _inactiveNav;
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 56,
-            height: 30,
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.primary.withValues(alpha: 0.1)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Icon(
-              selected ? selectedIcon : icon,
-              size: 23,
-              color: selected ? AppColors.primary : _inactive,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label,
-                maxLines: 1,
-                softWrap: false,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  height: 1.05,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  color: selected ? AppColors.primary : _inactive,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration: _duration,
+              curve: Curves.easeOutCubic,
+              width: selected ? 52 : 40,
+              height: 28,
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppColors.primary.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: AnimatedSwitcher(
+                duration: _duration,
+                child: Icon(
+                  selected ? selectedIcon : icon,
+                  key: ValueKey(selected),
+                  size: 22,
+                  color: color,
                 ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 3),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: AnimatedDefaultTextStyle(
+                  duration: _duration,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 11,
+                    height: 1.05,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: color,
+                  ),
+                  child: Text(label, maxLines: 1, softWrap: false),
+                ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            AnimatedContainer(
+              duration: _duration,
+              width: selected ? 4 : 0,
+              height: 4,
+              decoration: BoxDecoration(
+                color: activeColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _ProfileDrawer extends ConsumerWidget {
@@ -442,27 +555,34 @@ class _ProfileDrawer extends ConsumerWidget {
         selectedMode == ThemeMode.dark ||
         (selectedMode == ThemeMode.system && platformDark);
     return Drawer(
-      width: 292,
+      width: 300,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.horizontal(left: Radius.circular(24)),
+      ),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
+            Container(
+              margin: const EdgeInsets.all(AppSpacing.md),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(DashboardTokens.radius),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.12),
+                    DashboardTokens.teal.withValues(alpha: 0.06),
+                  ],
+                ),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.18),
+                ),
+              ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 25,
-                    backgroundColor: AppColors.primary100,
-                    foregroundColor: AppColors.primary600,
-                    child: Text(
-                      DashboardShell._initial(name),
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
+                  _ProfileAvatar(name: name, size: 48),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Column(
@@ -472,11 +592,13 @@ class _ProfileDrawer extends ConsumerWidget {
                           name?.trim().isNotEmpty ?? false ? name! : 'Doctor',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
+                            color: AppColors.onSurface(context),
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
+                        const SizedBox(height: 2),
                         Text(
                           'Practice account',
                           style: TextStyle(
@@ -490,7 +612,6 @@ class _ProfileDrawer extends ConsumerWidget {
                 ],
               ),
             ),
-            const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.person_outline_rounded),
               title: const Text('Profile'),
@@ -516,6 +637,10 @@ class _ProfileDrawer extends ConsumerWidget {
             ),
             const Spacer(),
             Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              child: shadcn.Divider(color: DashboardTokens.border(context)),
+            ),
+            Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
@@ -524,6 +649,9 @@ class _ProfileDrawer extends ConsumerWidget {
                     color: AppColors.destructive.withValues(alpha: 0.45),
                   ),
                   minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
                 ),
                 onPressed: () async {
                   await DashboardShell.confirmLogout(context, ref);

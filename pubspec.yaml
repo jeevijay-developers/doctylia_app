@@ -47,6 +47,8 @@ dependencies:
   supabase_flutter: ^2.16.0
   url_launcher: ^6.3.2
   razorpay_flutter: ^1.4.5
+  shadcn_flutter: ^0.0.47
+  shadcn_flutter_material: ^0.0.54
 
 dev_dependencies:
   flutter_test:

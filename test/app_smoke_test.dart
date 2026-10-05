@@ -95,10 +95,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Notifications'), findsOneWidget);
-    expect(find.text('Your notifications'), findsOneWidget);
-    expect(find.text('No notifications yet'), findsOneWidget);
     expect(find.byType(BottomSheet), findsNothing);
     expect(find.byTooltip('Back'), findsOneWidget);
+
+    // Grouped feed from the mock repository, with an unread pill.
+    expect(find.text('2 New'), findsOneWidget);
+    expect(find.text('TODAY'), findsOneWidget);
+    expect(find.text('View plans'), findsWidgets);
+
+    // Category filter narrows the feed.
+    await tester.tap(find.text('Support').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Open ticket'), findsOneWidget);
+    expect(find.text('View plans'), findsNothing);
+
+    // Mark all as read clears the unread state; Unread is then empty.
+    await tester.tap(find.byTooltip('Mark all as read'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 New'), findsNothing);
+    await tester.tap(find.text('Unread'));
+    await tester.pumpAndSettle();
+    expect(find.text('All caught up!'), findsOneWidget);
 
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(375, 812);
@@ -829,7 +846,7 @@ void main() {
 
     const readable = 0.35; // Dark card is ~0.01; light-on-dark text is >0.5.
     expect(tester.takeException(), isNull);
-    expect(luminanceOf(find.text('Check\nTomorrow')), greaterThan(readable));
+    expect(luminanceOf(find.text('Check Tomorrow')), greaterThan(readable));
     await tester.scrollUntilVisible(
       find.text('View site'),
       300,

@@ -1,7 +1,10 @@
+import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/features/auth/domain/entities/doctor_session.dart';
+import 'package:doctylia_app/features/dashboard/presentation/widgets/dashboard_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({required this.session, super.key});
@@ -14,99 +17,181 @@ class DashboardHeader extends StatelessWidget {
     final greeting = _greetingFor(now.hour);
     final name = _doctorName(session?.displayName);
 
-    return Container(
-      constraints: const BoxConstraints(minHeight: 172),
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 17),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF264CC9), Color(0xFF3471F3)],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF2455D6).withValues(alpha: 0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+    return DashboardShadcnScope(
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              DashboardTokens.blueDeep,
+              AppColors.primary600,
+              DashboardTokens.tealDeep,
+            ],
+            stops: [0, 0.55, 1],
           ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          const Positioned(right: -68, top: -86, child: _HeaderGlow(size: 190)),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+          boxShadow: [
+            BoxShadow(
+              color: DashboardTokens.blueDeep.withValues(alpha: 0.22),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Positioned(
+              right: -70,
+              top: -90,
+              child: _HeaderGlow(size: 200, alpha: 0.06),
+            ),
+            const Positioned(
+              right: 30,
+              bottom: -80,
+              child: _HeaderGlow(size: 120, alpha: 0.05),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Icon(greeting.icon, size: 13, color: Colors.white),
-                    const SizedBox(width: 5),
-                    // Long dates ("Wednesday, September 30, 2026") overflowed
-                    // narrow phones; shrink to fit instead.
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          DateFormat('EEEE, MMMM d, yyyy').format(now),
-                          maxLines: 1,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                          ),
+                    shadcn.Avatar(
+                      initials: shadcn.Avatar.getInitials(
+                        _cleanName(session?.displayName),
+                      ),
+                      size: 48,
+                      borderRadius: 14,
+                      backgroundColor: Colors.white.withValues(alpha: 0.18),
+                      theme: const shadcn.AvatarTheme(
+                        textStyle: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
                         ),
+                      ),
+                      badge: const shadcn.AvatarBadge(
+                        size: 12,
+                        color: AppColors.success,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                greeting.icon,
+                                size: 13,
+                                color: const Color(0xFFBFE9FF),
+                              ),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  greeting.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFFD5E4FF),
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Dr. $name',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 23,
+                                  height: 1.15,
+                                  letterSpacing: -0.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 13),
-              Text(
-                '${greeting.label},\nDr. $name',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Colors.white,
-                  fontSize: 24,
-                  height: 1.14,
-                  letterSpacing: -0.5,
-                  fontWeight: FontWeight.w800,
+                const SizedBox(height: 14),
+                const Text(
+                  'Here is an overview of your clinical performance and '
+                  'appointments today.',
+                  style: TextStyle(
+                    color: Color(0xFFDCE7FF),
+                    fontSize: 12.5,
+                    height: 1.45,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 5),
-              const Text(
-                'Here is an overview of your clinical performance and '
-                'appointments today.',
-                style: TextStyle(
-                  color: Color(0xFFDCE7FF),
-                  fontSize: 12.5,
-                  height: 1.45,
-                  fontWeight: FontWeight.w500,
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.calendar_today_rounded,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 6),
+                      // Long dates ("Wednesday, September 30, 2026") overflowed
+                      // narrow phones; shrink to fit instead.
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            DateFormat('EEEE, MMMM d, yyyy').format(now),
+                            maxLines: 1,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  static String _doctorName(String? displayName) {
+  static String _cleanName(String? displayName) {
     final clean = (displayName ?? 'Doctor')
         .replaceFirst(RegExp(r'^Dr\.?\s*', caseSensitive: false), '')
         .trim();
-    return clean.isEmpty ? 'Doctor' : clean.split(RegExp(r'\s+')).first;
+    return clean.isEmpty ? 'Doctor' : clean;
   }
+
+  static String _doctorName(String? displayName) =>
+      _cleanName(displayName).split(RegExp(r'\s+')).first;
 
   static _Greeting _greetingFor(int hour) {
     if (hour < 12) {
@@ -127,9 +212,10 @@ class _Greeting {
 }
 
 class _HeaderGlow extends StatelessWidget {
-  const _HeaderGlow({required this.size});
+  const _HeaderGlow({required this.size, required this.alpha});
 
   final double size;
+  final double alpha;
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
@@ -138,7 +224,7 @@ class _HeaderGlow extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white.withValues(alpha: 0.035),
+        color: Colors.white.withValues(alpha: alpha),
       ),
     ),
   );

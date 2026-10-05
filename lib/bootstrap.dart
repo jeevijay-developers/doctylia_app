@@ -15,6 +15,8 @@ import 'package:doctylia_app/features/billing/data/repositories/supabase_billing
 import 'package:doctylia_app/features/billing/presentation/providers/billing_providers.dart';
 import 'package:doctylia_app/features/dashboard/data/repositories/supabase_dashboard_repository.dart';
 import 'package:doctylia_app/features/dashboard/presentation/providers/dashboard_providers.dart';
+import 'package:doctylia_app/features/notifications/data/repositories/supabase_notification_repository.dart';
+import 'package:doctylia_app/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:doctylia_app/features/inquiries/data/repositories/supabase_inquiry_repository.dart';
 import 'package:doctylia_app/features/inquiries/presentation/providers/inquiry_providers.dart';
 import 'package:doctylia_app/features/patients/data/repositories/supabase_patient_repository.dart';
@@ -69,6 +71,9 @@ Future<void> bootstrap({AppFlavor flavor = AppFlavor.mock}) async {
             ),
             dashboardRepositoryProvider.overrideWithValue(
               SupabaseDashboardRepository(Supabase.instance.client),
+            ),
+            notificationRepositoryProvider.overrideWithValue(
+              SupabaseNotificationRepository(Supabase.instance.client),
             ),
             inquiryRepositoryProvider.overrideWithValue(
               SupabaseInquiryRepository(Supabase.instance.client),

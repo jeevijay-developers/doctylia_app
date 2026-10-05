@@ -1,8 +1,32 @@
 import 'package:doctylia_app/core/theme/app_colors.dart';
+import 'package:doctylia_app/features/dashboard/presentation/widgets/dashboard_ui.dart';
 import 'package:doctylia_app/features/patients/domain/entities/patient.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
+/// Tint for the New / Regular / Loyal patient status.
+Color patientStatusColor(Patient patient) => switch (patient.statusLabel) {
+  'Loyal' => AppColors.success,
+  'Regular' => AppColors.aiPurple,
+  _ => DashboardTokens.teal,
+};
+
+String patientInitials(String value) {
+  final parts = value.trim().split(RegExp(r'\s+'));
+  if (parts.isEmpty || parts.first.isEmpty) return 'P';
+  return parts.take(2).map((part) => part[0].toUpperCase()).join();
+}
+
+/// Short, stable display id derived from the record id (not an MRN).
+String patientShortId(String id) {
+  final clean = id.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+  final tail = clean.length <= 6 ? clean : clean.substring(clean.length - 6);
+  return 'ID ${tail.toUpperCase()}';
+}
+
+/// Three-tier clinical patient card: identity header, recessed demographics
+/// strip and a quick-action footer.
 class PatientCard extends StatelessWidget {
   const PatientCard({
     required this.patient,
@@ -28,352 +52,409 @@ class PatientCard extends StatelessWidget {
   final ValueChanged<bool?>? onSelectionChanged;
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(17),
-      border: Border.all(color: AppColors.border(context)),
-      boxShadow: [
-        BoxShadow(
-          color: AppColors.shadow(context, alpha: 0.045),
-          blurRadius: 13,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(13, 13, 10, 11),
-            child: Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (selectionMode) ...[
-                      Checkbox(
-                        value: selected,
-                        onChanged: onSelectionChanged,
-                        visualDensity: VisualDensity.compact,
+  Widget build(BuildContext context) {
+    final statusColor = patientStatusColor(patient);
+    return DashboardShadcnScope(
+      child: shadcn.Card(
+        padding: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        borderRadius: BorderRadius.circular(DashboardTokens.radius),
+        borderColor: selectionMode && selected
+            ? DashboardTokens.teal.withValues(alpha: 0.6)
+            : DashboardTokens.border(context),
+        boxShadow: DashboardTokens.shadow(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header + body are the card's tap target (transparent Material
+            // keeps the ripple above the card surface); footer buttons sit
+            // outside it so they stay independently tappable.
+            Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                onTap: onTap,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _IdentityHeader(
+                        patient: patient,
+                        statusColor: statusColor,
+                        selectionMode: selectionMode,
+                        selected: selected,
+                        onSelectionChanged: onSelectionChanged,
                       ),
-                      const SizedBox(width: 3),
+                      const SizedBox(height: 12),
+                      _DemographicsStrip(patient: patient),
                     ],
-                    _PatientAvatar(patient: patient),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  patient.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: AppColors.onSurface(context),
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              _PatientStatusBadge(patient: patient),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 5,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              if (patient.age != null)
-                                Text('${patient.age} Yrs', style: _metaStyle),
-                              if (patient.age != null && _hasGender(patient))
-                                const Text('•', style: _metaStyle),
-                              if (_hasGender(patient))
-                                Text(patient.gender!, style: _metaStyle),
-                              if (patient.age != null || _hasGender(patient))
-                                const Text('•', style: _metaStyle),
-                              _VisitBadge(count: patient.totalVisits),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (onEdit != null)
-                      IconButton(
-                        onPressed: onEdit,
-                        tooltip: 'Edit patient',
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(
-                          Icons.edit_outlined,
-                          size: 17,
-                          color: AppColors.subtleText(context),
-                        ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 7),
-                      child: Icon(
-                        Icons.chevron_right_rounded,
-                        size: 19,
-                        color: AppColors.subtleText(context),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 10),
-                Divider(height: 1, color: AppColors.border(context)),
-                const SizedBox(height: 9),
-                _ContactRow(
-                  icon: Icons.phone_outlined,
-                  value: patient.phone,
-                  actionLabel: 'Call',
-                  onAction: patient.phone.trim().isEmpty ? null : onCall,
-                ),
-                if (patient.email?.trim().isNotEmpty == true) ...[
-                  const SizedBox(height: 7),
-                  _ContactRow(
-                    icon: Icons.alternate_email_rounded,
-                    value: patient.email!,
-                    trailing: patient.createdAt == null
-                        ? null
-                        : 'Registered: ${DateFormat('d MMM yyyy').format(patient.createdAt!)}',
-                  ),
-                ] else if (patient.createdAt != null) ...[
-                  const SizedBox(height: 7),
-                  _ContactRow(
-                    icon: Icons.event_available_outlined,
-                    value:
-                        'Registered ${DateFormat('d MMM yyyy').format(patient.createdAt!)}',
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
-        ),
-        if (!selectionMode &&
-            (onCreatePrescription != null || onBookVisit != null)) ...[
-          Divider(height: 1, color: AppColors.border(context)),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(13, 8, 13, 10),
-            child: Row(
-              children: [
-                if (onCreatePrescription != null)
-                  Expanded(
-                    child: _QuickActionButton(
-                      label: 'Create Rx',
-                      icon: Icons.add_rounded,
-                      onPressed: onCreatePrescription!,
-                      filled: true,
-                    ),
-                  ),
-                if (onCreatePrescription != null && onBookVisit != null)
-                  const SizedBox(width: 8),
-                if (onBookVisit != null)
-                  Expanded(
-                    child: _QuickActionButton(
-                      label: 'Book Visit',
-                      icon: Icons.calendar_today_outlined,
-                      onPressed: onBookVisit!,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    ),
-  );
-
-  static bool _hasGender(Patient patient) =>
-      patient.gender?.trim().isNotEmpty == true;
-
-  static const _metaStyle = TextStyle(
-    color: AppColors.textMuted,
-    fontSize: 10.5,
-  );
-}
-
-class _PatientAvatar extends StatelessWidget {
-  const _PatientAvatar({required this.patient});
-
-  final Patient patient;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (patient.statusLabel) {
-      'Loyal' => AppColors.success,
-      'Regular' => AppColors.aiPurple,
-      _ => AppColors.teal,
-    };
-    return Container(
-      width: 44,
-      height: 44,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        shape: BoxShape.circle,
-        border: Border.all(color: color.withValues(alpha: 0.25), width: 1.3),
-      ),
-      child: Text(
-        _initials(patient.name),
-        style: TextStyle(
-          color: color,
-          fontSize: 14,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-
-  static String _initials(String value) {
-    final parts = value.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return 'P';
-    return parts.take(2).map((part) => part[0].toUpperCase()).join();
-  }
-}
-
-class _PatientStatusBadge extends StatelessWidget {
-  const _PatientStatusBadge({required this.patient});
-
-  final Patient patient;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = patient.totalVisits >= 10
-        ? AppColors.success
-        : patient.totalVisits >= 3
-        ? AppColors.aiPurple
-        : AppColors.warning;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        patient.statusLabel,
-        style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
+            if (!selectionMode) ...[
+              shadcn.Divider(color: DashboardTokens.border(context)),
+              _ActionFooter(
+                onCall: patient.phone.trim().isEmpty ? null : onCall,
+                onEdit: onEdit,
+                onBookVisit: onBookVisit,
+                onCreatePrescription: onCreatePrescription,
+                onOpenRecords: onTap,
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
 }
 
-class _VisitBadge extends StatelessWidget {
-  const _VisitBadge({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: AppColors.success.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(5),
-    ),
-    child: Text(
-      '$count visit${count == 1 ? '' : 's'}',
-      style: const TextStyle(
-        color: AppColors.success,
-        fontSize: 9.5,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
-}
-
-class _ContactRow extends StatelessWidget {
-  const _ContactRow({
-    required this.icon,
-    required this.value,
-    this.actionLabel,
-    this.onAction,
-    this.trailing,
+class _IdentityHeader extends StatelessWidget {
+  const _IdentityHeader({
+    required this.patient,
+    required this.statusColor,
+    required this.selectionMode,
+    required this.selected,
+    required this.onSelectionChanged,
   });
 
-  final IconData icon;
-  final String value;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-  final String? trailing;
+  final Patient patient;
+  final Color statusColor;
+  final bool selectionMode;
+  final bool selected;
+  final ValueChanged<bool?>? onSelectionChanged;
 
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      Icon(icon, size: 13, color: AppColors.textLight),
-      const SizedBox(width: 7),
-      Expanded(
-        child: Text(
-          value,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: AppColors.textMuted, fontSize: 10.5),
+      if (selectionMode) ...[
+        shadcn.Checkbox(
+          state: selected
+              ? shadcn.CheckboxState.checked
+              : shadcn.CheckboxState.unchecked,
+          activeColor: DashboardTokens.teal,
+          onChanged: onSelectionChanged == null
+              ? null
+              : (state) =>
+                    onSelectionChanged!(state == shadcn.CheckboxState.checked),
+        ),
+        const SizedBox(width: 10),
+      ],
+      shadcn.Avatar(
+        initials: patientInitials(patient.name),
+        size: 46,
+        borderRadius: 14,
+        backgroundColor: statusColor.withValues(alpha: 0.12),
+        theme: shadcn.AvatarTheme(
+          textStyle: TextStyle(color: statusColor, fontWeight: FontWeight.w800),
         ),
       ),
-      if (trailing != null)
-        Text(
-          trailing!,
-          style: const TextStyle(color: AppColors.textLight, fontSize: 8.5),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              patient.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.onSurface(context),
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              patientShortId(patient.id),
+              maxLines: 1,
+              style: TextStyle(
+                color: AppColors.subtleText(context),
+                fontSize: 11,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ],
         ),
-      if (actionLabel != null)
-        TextButton(
-          onPressed: onAction,
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 7),
-            visualDensity: VisualDensity.compact,
-            foregroundColor: AppColors.primary600,
-            textStyle: const TextStyle(
-              fontSize: 10,
+      ),
+      const SizedBox(width: 8),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          DashboardToneBadge(
+            label: patient.statusLabel,
+            color: statusColor,
+            showDot: true,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${patient.totalVisits} visit${patient.totalVisits == 1 ? '' : 's'}',
+            style: TextStyle(
+              color: AppColors.mutedText(context),
+              fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
           ),
-          child: Text(actionLabel!),
-        ),
+        ],
+      ),
     ],
   );
 }
 
-class _QuickActionButton extends StatelessWidget {
-  const _QuickActionButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.filled = false,
-  });
+/// Recessed 3-column strip: demographics, last visit and contact.
+class _DemographicsStrip extends StatelessWidget {
+  const _DemographicsStrip({required this.patient});
 
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool filled;
+  final Patient patient;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 34,
-    child: OutlinedButton.icon(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        backgroundColor: filled ? AppColors.primary50 : Colors.transparent,
-        foregroundColor: filled
-            ? AppColors.primary600
-            : AppColors.onSurface(context),
-        side: BorderSide(
-          color: filled ? AppColors.primary50 : AppColors.border(context),
+  Widget build(BuildContext context) {
+    final gender = patient.gender?.trim();
+    final demographics = [
+      if (patient.age != null) '${patient.age} Yrs',
+      if (gender != null && gender.isNotEmpty) gender,
+    ].join(' • ');
+    final visitDate = patient.lastVisit ?? patient.createdAt;
+    Widget divider() => Container(
+      width: 1,
+      height: 32,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      color: DashboardTokens.border(context),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.secondarySurface(context).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(DashboardTokens.innerRadius),
+        border: Border.all(
+          color: DashboardTokens.border(context).withValues(alpha: 0.7),
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600),
       ),
-      icon: Icon(icon, size: 14),
-      label: Text(label),
+      child: Row(
+        children: [
+          Expanded(
+            child: _StripCell(
+              icon: Icons.person_outline_rounded,
+              label: 'Profile',
+              value: demographics.isEmpty ? '—' : demographics,
+            ),
+          ),
+          divider(),
+          Expanded(
+            child: _StripCell(
+              icon: Icons.calendar_today_rounded,
+              label: patient.lastVisit != null ? 'Last visit' : 'Registered',
+              value: visitDate == null
+                  ? '—'
+                  : DateFormat('d MMM yy').format(visitDate),
+            ),
+          ),
+          divider(),
+          Expanded(
+            child: _StripCell(
+              icon: Icons.phone_outlined,
+              label: 'Contact',
+              value: patient.phone.trim().isEmpty ? '—' : patient.phone,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StripCell extends StatelessWidget {
+  const _StripCell({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Icon(icon, size: 12, color: DashboardTokens.tealDeep),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.subtleText(context),
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          value,
+          maxLines: 1,
+          style: TextStyle(
+            color: AppColors.onSurface(context),
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _ActionFooter extends StatelessWidget {
+  const _ActionFooter({
+    required this.onCall,
+    required this.onEdit,
+    required this.onBookVisit,
+    required this.onCreatePrescription,
+    required this.onOpenRecords,
+  });
+
+  final VoidCallback? onCall;
+  final VoidCallback? onEdit;
+  final VoidCallback? onBookVisit;
+  final VoidCallback? onCreatePrescription;
+  final VoidCallback onOpenRecords;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(8, 8, 10, 10),
+    child: Row(
+      children: [
+        _IconAction(
+          icon: Icons.call_rounded,
+          tooltip: 'Call patient',
+          onPressed: onCall,
+          color: AppColors.success,
+        ),
+        if (onEdit != null)
+          _IconAction(
+            icon: Icons.edit_outlined,
+            tooltip: 'Edit patient',
+            onPressed: onEdit,
+          ),
+        const SizedBox(width: 6),
+        // Scales down rather than overflowing on narrow phones.
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onBookVisit != null)
+                    shadcn.OutlineButton(
+                      onPressed: onBookVisit,
+                      size: shadcn.ButtonSize.small,
+                      leading: const Icon(
+                        Icons.calendar_today_outlined,
+                        size: 13,
+                      ),
+                      child: const Text('Book Visit'),
+                    ),
+                  if (onCreatePrescription != null) ...[
+                    const SizedBox(width: 6),
+                    shadcn.Button(
+                      onPressed: onCreatePrescription,
+                      leading: const Icon(Icons.add_rounded, size: 14),
+                      style:
+                          const shadcn.ButtonStyle.secondary(
+                            size: shadcn.ButtonSize.small,
+                          ).copyWith(
+                            decoration: (context, states, value) =>
+                                BoxDecoration(
+                                  color: DashboardTokens.teal.withValues(
+                                    alpha: states.contains(WidgetState.hovered)
+                                        ? 0.18
+                                        : 0.12,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: DashboardTokens.teal.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                  ),
+                                ),
+                            textStyle: (context, states, value) =>
+                                value.copyWith(
+                                  color: DashboardTokens.tealDeep,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                            iconTheme: (context, states, value) =>
+                                value.copyWith(color: DashboardTokens.tealDeep),
+                          ),
+                      child: const Text('Create Rx'),
+                    ),
+                  ],
+                  const SizedBox(width: 4),
+                  shadcn.GhostButton(
+                    onPressed: onOpenRecords,
+                    size: shadcn.ButtonSize.small,
+                    trailing: const Icon(Icons.chevron_right_rounded, size: 16),
+                    child: const Text(
+                      'Records',
+                      style: TextStyle(
+                        color: DashboardTokens.tealDeep,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _IconAction extends StatelessWidget {
+  const _IconAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.color,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: shadcn.IconButton.ghost(
+      onPressed: onPressed,
+      size: shadcn.ButtonSize.small,
+      icon: Icon(
+        icon,
+        size: 17,
+        color: onPressed == null
+            ? AppColors.subtleText(context)
+            : color ?? AppColors.mutedText(context),
+      ),
     ),
   );
 }

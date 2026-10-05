@@ -2,14 +2,17 @@ import 'dart:math' as math;
 
 import 'package:doctylia_app/core/platform/external_link_service.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
-import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/core/widgets/whatsapp_icon.dart';
 import 'package:doctylia_app/features/dashboard/domain/entities/dashboard_snapshot.dart';
+import 'package:doctylia_app/features/dashboard/presentation/widgets/dashboard_ui.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
+
+const _chartColor = Color(0xFF009CDD);
 
 class RevenueCard extends StatelessWidget {
   const RevenueCard({
@@ -27,96 +30,82 @@ class RevenueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final money = NumberFormat.currency(
       locale: 'en_IN',
-      symbol: '\u20B9',
+      symbol: '₹',
       decimalDigits: 0,
     );
     final trend = growthPercent;
     final isPositive = trend == null || trend >= 0;
     final trendColor = isPositive ? AppColors.success : AppColors.destructive;
 
-    return _DashboardSectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _SectionIcon(
-                icon: Icons.currency_rupee_rounded,
-                color: Color(0xFF00A9B8),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Monthly Revenue',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 7,
-                      runSpacing: 3,
-                      children: [
-                        Text(
-                          money.format(monthlyRevenue),
-                          style: TextStyle(
-                            color: AppColors.onSurface(context),
-                            fontSize: 21,
-                            height: 1,
-                            letterSpacing: -0.3,
-                            fontWeight: FontWeight.w800,
-                          ),
+    return DashboardShadcnScope(
+      child: DashboardSurface(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const DashboardIconTile(
+                  icon: Icons.currency_rupee_rounded,
+                  color: DashboardTokens.teal,
+                  size: 36,
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Monthly Revenue',
+                        style: TextStyle(
+                          color: AppColors.mutedText(context),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: trendColor.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(AppRadius.pill),
-                          ),
-                          child: Text(
-                            trend == null
-                                ? '\u2197 NEW'
-                                : '${isPositive ? '\u2197 +' : '\u2198 '}${trend.toStringAsFixed(1)}%',
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          Text(
+                            money.format(monthlyRevenue),
                             style: TextStyle(
-                              color: trendColor,
-                              fontSize: 9,
+                              color: AppColors.onSurface(context),
+                              fontSize: 24,
+                              height: 1,
+                              letterSpacing: -0.5,
                               fontWeight: FontWeight.w800,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.secondarySurface(context),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Text(
-                  'Last 30 days',
-                  style: TextStyle(
-                    color: AppColors.subtleText(context),
-                    fontSize: 9.5,
+                          DashboardToneBadge(
+                            label: trend == null
+                                ? 'NEW'
+                                : '${isPositive ? '+' : ''}${trend.toStringAsFixed(1)}%',
+                            color: trendColor,
+                            icon: isPositive
+                                ? Icons.trending_up_rounded
+                                : Icons.trending_down_rounded,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(height: 180, child: _RevenueLineChart(points: points)),
-        ],
+                const SizedBox(width: 6),
+                const shadcn.OutlineBadge(child: Text('Last 30 days')),
+              ],
+            ),
+            const SizedBox(height: 14),
+            shadcn.Divider(color: DashboardTokens.border(context)),
+            const SizedBox(height: 14),
+            SizedBox(height: 180, child: _RevenueLineChart(points: points)),
+          ],
+        ),
       ),
     );
   }
@@ -137,14 +126,14 @@ class _RevenueLineChart extends StatelessWidget {
     final interval = maxValue / 4;
     final money = NumberFormat.compactCurrency(
       locale: 'en_IN',
-      symbol: '\u20B9',
+      symbol: '₹',
       decimalDigits: 2,
     );
-    // Axis ticks use whole compact values ("\u20B912K") so they fit their column
-    // instead of spilling over the plot ("\u20B912.35K").
+    // Axis ticks use whole compact values ("₹12K") so they fit their column
+    // instead of spilling over the plot ("₹12.35K").
     final axisMoney = NumberFormat.compactCurrency(
       locale: 'en_IN',
-      symbol: '\u20B9',
+      symbol: '₹',
       decimalDigits: 0,
     );
     final axisLabelColor = AppColors.subtleText(context);
@@ -161,9 +150,9 @@ class _RevenueLineChart extends StatelessWidget {
           drawVerticalLine: false,
           horizontalInterval: interval,
           getDrawingHorizontalLine: (_) => FlLine(
-            color: AppColors.border(context),
+            color: DashboardTokens.border(context),
             strokeWidth: 1,
-            dashArray: const [3, 3],
+            dashArray: const [3, 4],
           ),
         ),
         titlesData: FlTitlesData(
@@ -185,7 +174,7 @@ class _RevenueLineChart extends StatelessWidget {
                 child: Text(
                   axisMoney.format(value),
                   maxLines: 1,
-                  style: TextStyle(color: axisLabelColor, fontSize: 8),
+                  style: TextStyle(color: axisLabelColor, fontSize: 8.5),
                 ),
               ),
             ),
@@ -214,7 +203,7 @@ class _RevenueLineChart extends StatelessWidget {
                     maxLines: 1,
                     style: TextStyle(
                       color: isLast ? AppColors.primary : axisLabelColor,
-                      fontSize: 8,
+                      fontSize: 8.5,
                       fontWeight: isLast ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
@@ -226,12 +215,12 @@ class _RevenueLineChart extends StatelessWidget {
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => const Color(0xFF172236),
-            tooltipRoundedRadius: 6,
+            tooltipRoundedRadius: 8,
             getTooltipItems: (spots) => spots
                 .map((spot) {
                   final point = points[spot.x.round()];
                   return LineTooltipItem(
-                    '${DateFormat('MMM d').format(point.day)} \u00B7 ${money.format(point.amount)}',
+                    '${DateFormat('MMM d').format(point.day)} · ${money.format(point.amount)}',
                     const TextStyle(
                       color: Colors.white,
                       fontSize: 9.5,
@@ -250,7 +239,7 @@ class _RevenueLineChart extends StatelessWidget {
             ],
             isCurved: true,
             curveSmoothness: 0.18,
-            color: const Color(0xFF009CDD),
+            color: _chartColor,
             barWidth: 2.6,
             isStrokeCapRound: true,
             dotData: FlDotData(
@@ -259,9 +248,9 @@ class _RevenueLineChart extends StatelessWidget {
                   barData.spots.isNotEmpty && spot.x == barData.spots.last.x,
               getDotPainter: (spot, percent, barData, index) =>
                   FlDotCirclePainter(
-                    radius: 3.5,
-                    color: const Color(0xFF009CDD),
-                    strokeWidth: 1.5,
+                    radius: 4,
+                    color: _chartColor,
+                    strokeWidth: 2,
                     strokeColor: Colors.white,
                   ),
             ),
@@ -271,8 +260,8 @@ class _RevenueLineChart extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  const Color(0xFF009CDD).withValues(alpha: 0.13),
-                  const Color(0xFF009CDD).withValues(alpha: 0),
+                  _chartColor.withValues(alpha: 0.16),
+                  _chartColor.withValues(alpha: 0),
                 ],
               ),
             ),
@@ -300,147 +289,170 @@ class WebsiteShareCard extends ConsumerWidget {
     final url = websiteSlug == null
         ? null
         : 'https://doctylia.com/dr/$websiteSlug';
-    return _DashboardSectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const _SectionIcon(
-                icon: Icons.share_rounded,
-                color: AppColors.primary,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Share Your Website',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      'Direct Patient Bookings',
-                      style: TextStyle(
-                        color: AppColors.subtleText(context),
-                        fontSize: 9.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            url == null
-                ? 'Complete your public profile to start accepting direct patient bookings.'
-                : 'Share your dedicated booking website with patients to get direct appointments with 0% commission.',
-            style: TextStyle(
-              color: AppColors.mutedText(context),
-              fontSize: 10,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            height: 39,
-            padding: const EdgeInsets.only(left: 11, right: 2),
-            decoration: BoxDecoration(
-              color: AppColors.secondarySurface(context),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: AppColors.border(context)),
-            ),
-            child: Row(
+    return DashboardShadcnScope(
+      child: DashboardSurface(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
-                const Icon(
-                  Icons.link_rounded,
-                  size: 15,
+                const DashboardIconTile(
+                  icon: Icons.share_rounded,
                   color: AppColors.primary,
+                  size: 36,
                 ),
-                const SizedBox(width: 7),
+                const SizedBox(width: 11),
                 Expanded(
-                  child: Text(
-                    url ?? 'Your booking link is not available yet',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.onSurface(context),
-                      fontSize: 9.5,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Share Your Website',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.onSurface(context),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        'Direct Patient Bookings',
+                        style: TextStyle(
+                          color: AppColors.mutedText(context),
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                DashboardToneBadge(
+                  label: isLive ? 'Live' : 'Draft',
+                  color: isLive ? AppColors.success : AppColors.warning,
+                  showDot: true,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            shadcn.Divider(color: DashboardTokens.border(context)),
+            const SizedBox(height: 12),
+            Text(
+              url == null
+                  ? 'Complete your public profile to start accepting direct patient bookings.'
+                  : 'Share your dedicated booking website with patients to get direct appointments with 0% commission.',
+              style: TextStyle(
+                color: AppColors.mutedText(context),
+                fontSize: 11,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              height: 42,
+              padding: const EdgeInsets.only(left: 12, right: 2),
+              decoration: BoxDecoration(
+                color: AppColors.secondarySurface(
+                  context,
+                ).withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(
+                  DashboardTokens.innerRadius,
+                ),
+                border: Border.all(color: DashboardTokens.border(context)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.link_rounded,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      url ?? 'Your booking link is not available yet',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.onSurface(context),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Semantics(
+                    button: true,
+                    label: 'Copy link',
+                    child: shadcn.IconButton.ghost(
+                      onPressed: url == null ? null : () => _copy(context, url),
+                      size: shadcn.ButtonSize.small,
+                      icon: Icon(
+                        Icons.copy_rounded,
+                        size: 15,
+                        color: AppColors.mutedText(context),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 42,
+                    child: shadcn.OutlineButton(
+                      onPressed: url == null
+                          ? null
+                          : () => _openSite(context, ref, url),
+                      alignment: Alignment.center,
+                      leading: const Icon(Icons.open_in_new_rounded, size: 15),
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('View site', maxLines: 1),
+                      ),
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: url == null ? null : () => _copy(context, url),
-                  tooltip: 'Copy link',
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    Icons.copy_rounded,
-                    size: 14,
-                    color: AppColors.subtleText(context),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 42,
+                    child: FilledButton.icon(
+                      onPressed: url == null ? null : () => _share(ref, url),
+                      style: FilledButton.styleFrom(
+                        elevation: 0,
+                        backgroundColor: WhatsAppIcon.brandColor,
+                        disabledBackgroundColor: AppColors.secondarySurface(
+                          context,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      icon: const WhatsAppIcon(size: 16, withBackground: false),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Share on WhatsApp',
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 11),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: url == null
-                      ? null
-                      : () => _openSite(context, ref, url),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.onSurface(context),
-                    side: BorderSide(color: AppColors.border(context)),
-                    padding: const EdgeInsets.symmetric(vertical: 11),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 14),
-                  label: const Text(
-                    'View site',
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: url == null ? null : () => _share(ref, url),
-                  style: FilledButton.styleFrom(
-                    elevation: 0,
-                    backgroundColor: WhatsAppIcon.brandColor,
-                    disabledBackgroundColor: AppColors.secondarySurface(
-                      context,
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 11),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                  icon: const WhatsAppIcon(size: 16, withBackground: false),
-                  label: const FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      'Share on WhatsApp',
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -476,46 +488,4 @@ class WebsiteShareCard extends ConsumerWidget {
       ).showSnackBar(const SnackBar(content: Text('Link copied')));
     }
   }
-}
-
-class _DashboardSectionCard extends StatelessWidget {
-  const _DashboardSectionCard({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      border: Border.all(color: AppColors.border(context)),
-      boxShadow: [
-        BoxShadow(
-          color: AppColors.shadow(context, alpha: 0.055),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: child,
-  );
-}
-
-class _SectionIcon extends StatelessWidget {
-  const _SectionIcon({required this.icon, required this.color});
-
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 34,
-    height: 34,
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.075),
-      borderRadius: BorderRadius.circular(9),
-    ),
-    child: Icon(icon, size: 17, color: color),
-  );
 }

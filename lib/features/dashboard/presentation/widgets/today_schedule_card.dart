@@ -1,13 +1,14 @@
 import 'package:doctylia_app/app/router/route_names.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
-import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/features/appointments/presentation/providers/appointment_providers.dart';
 import 'package:doctylia_app/features/appointments/presentation/widgets/appointment_form_sheet.dart';
 import 'package:doctylia_app/features/dashboard/domain/entities/dashboard_snapshot.dart';
+import 'package:doctylia_app/features/dashboard/presentation/widgets/dashboard_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
 class TodayScheduleCard extends ConsumerWidget {
   const TodayScheduleCard({
@@ -22,82 +23,82 @@ class TodayScheduleCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final today = DateTime.now();
-    return _SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const _SectionIcon(icon: Icons.calendar_today_rounded),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Today's Schedule",
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      DateFormat('EEEE, MMM d').format(today),
-                      style: TextStyle(
-                        color: AppColors.subtleText(context),
-                        fontSize: 10.5,
-                      ),
-                    ),
-                  ],
+    return DashboardShadcnScope(
+      child: DashboardSurface(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const DashboardIconTile(
+                  icon: Icons.calendar_today_rounded,
+                  color: AppColors.primary,
+                  size: 36,
                 ),
-              ),
-              TextButton(
-                onPressed: () => context.go(RoutePaths.appointments),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'View All',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Today's Schedule",
+                        style: TextStyle(
+                          color: AppColors.onSurface(context),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                        ),
                       ),
-                    ),
-                    SizedBox(width: 1),
-                    Icon(Icons.chevron_right_rounded, size: 15),
-                  ],
+                      const SizedBox(height: 1),
+                      Text(
+                        DateFormat('EEEE, MMM d').format(today),
+                        style: TextStyle(
+                          color: AppColors.mutedText(context),
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 11),
-          Divider(height: 1, color: AppColors.border(context)),
-          if (appointments.isEmpty)
-            _CompletedScheduleState(
-              hadAppointments: totalTodayCount > 0,
-              onAddWalkIn: () =>
-                  showAppointmentForm(context, ref, walkIn: true),
-              onCheckTomorrow: () => _checkTomorrow(context, ref),
-            )
-          else ...[
-            const SizedBox(height: 4),
-            for (var index = 0; index < appointments.length; index++) ...[
-              AppointmentRow(appointment: appointments[index]),
-              if (index != appointments.length - 1)
-                Divider(height: 1, color: AppColors.border(context)),
-            ],
-            const SizedBox(height: 8),
-            _ScheduleActions(
-              onAddWalkIn: () =>
-                  showAppointmentForm(context, ref, walkIn: true),
-              onCheckTomorrow: () => _checkTomorrow(context, ref),
+                shadcn.GhostButton(
+                  onPressed: () => context.go(RoutePaths.appointments),
+                  size: shadcn.ButtonSize.small,
+                  trailing: const Icon(Icons.chevron_right_rounded, size: 15),
+                  child: const Text(
+                    'View All',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 12),
+            shadcn.Divider(color: DashboardTokens.border(context)),
+            if (appointments.isEmpty)
+              _CompletedScheduleState(
+                hadAppointments: totalTodayCount > 0,
+                onAddWalkIn: () =>
+                    showAppointmentForm(context, ref, walkIn: true),
+                onCheckTomorrow: () => _checkTomorrow(context, ref),
+              )
+            else ...[
+              const SizedBox(height: 12),
+              for (var index = 0; index < appointments.length; index++)
+                AppointmentRow(
+                  appointment: appointments[index],
+                  isLast: index == appointments.length - 1,
+                ),
+              const SizedBox(height: 12),
+              _ScheduleActions(
+                onAddWalkIn: () =>
+                    showAppointmentForm(context, ref, walkIn: true),
+                onCheckTomorrow: () => _checkTomorrow(context, ref),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -125,11 +126,11 @@ class _CompletedScheduleState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(5, 17, 5, 2),
+    padding: const EdgeInsets.fromLTRB(4, 20, 4, 0),
     child: Column(
       children: [
         const _ScheduleCompleteMark(),
-        const SizedBox(height: 13),
+        const SizedBox(height: 14),
         Text(
           hadAppointments
               ? 'All appointments wrapped up for today!'
@@ -137,23 +138,22 @@ class _CompletedScheduleState extends StatelessWidget {
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppColors.onSurface(context),
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 6),
         Text(
-          'Your schedule is currently clear. New bookings\n'
-          'and walk-in consultations will appear here\n'
-          'automatically.',
+          'Your schedule is currently clear. New bookings and walk-in '
+          'consultations will appear here automatically.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppColors.mutedText(context),
-            fontSize: 10,
+            fontSize: 11,
             height: 1.5,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
         _ScheduleActions(
           onAddWalkIn: onAddWalkIn,
           onCheckTomorrow: onCheckTomorrow,
@@ -168,48 +168,49 @@ class _ScheduleCompleteMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 62,
-    height: 62,
+    width: 64,
+    height: 64,
     child: Stack(
       clipBehavior: Clip.none,
       children: [
         Container(
           decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.1),
             shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.primary.withValues(alpha: 0.14),
+                DashboardTokens.teal.withValues(alpha: 0.1),
+              ],
+            ),
           ),
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(11),
           child: Container(
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.16),
+              color: AppColors.surface(context),
               shape: BoxShape.circle,
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.2),
+              ),
             ),
             child: const Icon(
-              Icons.check_circle_outline_rounded,
+              Icons.check_rounded,
               size: 22,
               color: AppColors.primary,
             ),
           ),
         ),
         Positioned(
-          right: -3,
-          top: -5,
+          right: -2,
+          top: -2,
           child: Container(
-            width: 22,
-            height: 22,
+            width: 18,
+            height: 18,
             decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.18),
+              color: AppColors.success,
               shape: BoxShape.circle,
               border: Border.all(color: AppColors.surface(context), width: 3),
-            ),
-            alignment: Alignment.center,
-            child: Container(
-              width: 7,
-              height: 7,
-              decoration: const BoxDecoration(
-                color: AppColors.success,
-                shape: BoxShape.circle,
-              ),
             ),
           ),
         ),
@@ -231,47 +232,23 @@ class _ScheduleActions extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       Expanded(
-        child: FilledButton.icon(
+        child: shadcn.PrimaryButton(
           onPressed: onAddWalkIn,
-          style: FilledButton.styleFrom(
-            elevation: 0,
-            backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-            foregroundColor: AppColors.isDark(context)
-                ? AppColors.primary400
-                : AppColors.primary600,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(9),
-            ),
-          ),
-          icon: const Icon(Icons.add_rounded, size: 16),
-          label: const Text(
-            'Add Walk-in',
-            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600),
+          leading: const Icon(Icons.add_rounded, size: 16),
+          child: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('Add Walk-in', maxLines: 1),
           ),
         ),
       ),
-      const SizedBox(width: 9),
+      const SizedBox(width: 10),
       Expanded(
-        child: OutlinedButton.icon(
+        child: shadcn.OutlineButton(
           onPressed: onCheckTomorrow,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.onSurface(context),
-            padding: const EdgeInsets.symmetric(vertical: 9),
-            side: BorderSide(color: AppColors.border(context)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(9),
-            ),
-          ),
-          icon: const Icon(Icons.calendar_today_outlined, size: 13),
-          label: const Text(
-            'Check\nTomorrow',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 9.5,
-              height: 1.1,
-              fontWeight: FontWeight.w600,
-            ),
+          leading: const Icon(Icons.event_outlined, size: 15),
+          child: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('Check Tomorrow', maxLines: 1),
           ),
         ),
       ),
@@ -280,67 +257,165 @@ class _ScheduleActions extends StatelessWidget {
 }
 
 class AppointmentRow extends StatelessWidget {
-  const AppointmentRow({required this.appointment, super.key});
+  const AppointmentRow({
+    required this.appointment,
+    this.isLast = true,
+    super.key,
+  });
 
   final DashboardAppointment appointment;
 
+  /// Hides the timeline connector below the last row.
+  final bool isLast;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 11),
-    child: Row(
-      children: [
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: AppColors.primary50,
-          foregroundColor: AppColors.primary600,
-          child: Text(
-            appointment.patientName.isEmpty ? 'P' : appointment.patientName[0],
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                appointment.patientName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                '${appointment.serviceName} \u00B7 ${appointment.appointmentType}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: AppColors.mutedText(context),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+  Widget build(BuildContext context) {
+    final statusColor = _statusColor(appointment.status);
+    final hasTime = appointment.timeSlot != null;
+    final name = appointment.patientName;
+    return DashboardShadcnScope(
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              appointment.timeSlot == null
-                  ? 'Time not set'
-                  : DateFormat('h:mm a').format(appointment.scheduledAt),
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            SizedBox(
+              width: 50,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      hasTime
+                          ? DateFormat('h:mm').format(appointment.scheduledAt)
+                          : '—',
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: AppColors.onSurface(context),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Text(
+                      hasTime
+                          ? DateFormat('a').format(appointment.scheduledAt)
+                          : 'Time not set',
+                      maxLines: 2,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(
+                        color: AppColors.subtleText(context),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 3),
-            _StatusPill(status: appointment.status),
+            SizedBox(
+              width: 24,
+              child: Column(
+                children: [
+                  const SizedBox(height: 15),
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: 0.25),
+                        width: 3,
+                        strokeAlign: BorderSide.strokeAlignOutside,
+                      ),
+                    ),
+                  ),
+                  if (!isLast)
+                    Expanded(
+                      child: Container(
+                        width: 1.5,
+                        margin: const EdgeInsets.only(top: 6),
+                        color: DashboardTokens.border(context),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: isLast ? 0 : 8),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondarySurface(
+                      context,
+                    ).withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(
+                      DashboardTokens.innerRadius,
+                    ),
+                    border: Border.all(color: DashboardTokens.border(context)),
+                  ),
+                  child: Row(
+                    children: [
+                      shadcn.Avatar(
+                        initials: name.trim().isEmpty
+                            ? 'P'
+                            : shadcn.Avatar.getInitials(name),
+                        size: 36,
+                        borderRadius: 10,
+                        backgroundColor: AppColors.isDark(context)
+                            ? AppColors.primary.withValues(alpha: 0.18)
+                            : AppColors.primary50,
+                        theme: shadcn.AvatarTheme(
+                          textStyle: TextStyle(
+                            color: AppColors.isDark(context)
+                                ? AppColors.primary400
+                                : AppColors.primary600,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppColors.onSurface(context),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              '${appointment.serviceName} · ${appointment.appointmentType}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: AppColors.mutedText(context),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            _StatusPill(status: appointment.status),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _StatusPill extends StatelessWidget {
@@ -350,73 +425,21 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _statusColor(status);
     final label = status == DashboardAppointmentStatus.noShow
         ? 'No show'
         : '${status.name[0].toUpperCase()}${status.name.substring(1)}';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 9.5,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
+    return DashboardToneBadge(
+      label: label,
+      color: _statusColor(status),
+      showDot: true,
     );
   }
-
-  Color _statusColor(DashboardAppointmentStatus status) => switch (status) {
-    DashboardAppointmentStatus.confirmed => AppColors.primary,
-    DashboardAppointmentStatus.completed => AppColors.success,
-    DashboardAppointmentStatus.cancelled => AppColors.destructive,
-    DashboardAppointmentStatus.pending => AppColors.warning,
-    DashboardAppointmentStatus.noShow => AppColors.warning,
-  };
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      border: Border.all(color: AppColors.border(context)),
-      boxShadow: [
-        BoxShadow(
-          color: AppColors.shadow(context, alpha: 0.055),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: child,
-  );
-}
-
-class _SectionIcon extends StatelessWidget {
-  const _SectionIcon({required this.icon});
-
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 34,
-    height: 34,
-    decoration: BoxDecoration(
-      color: AppColors.primary.withValues(alpha: 0.075),
-      borderRadius: BorderRadius.circular(9),
-    ),
-    child: Icon(icon, size: 17, color: AppColors.primary),
-  );
-}
+Color _statusColor(DashboardAppointmentStatus status) => switch (status) {
+  DashboardAppointmentStatus.confirmed => AppColors.primary,
+  DashboardAppointmentStatus.completed => AppColors.success,
+  DashboardAppointmentStatus.cancelled => AppColors.destructive,
+  DashboardAppointmentStatus.pending => AppColors.warning,
+  DashboardAppointmentStatus.noShow => AppColors.warning,
+};
