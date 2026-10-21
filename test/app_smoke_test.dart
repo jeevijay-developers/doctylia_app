@@ -39,17 +39,35 @@ void main() {
     expect(find.text('Track Growth.\nGrow Smart.'), findsOneWidget);
     await tester.tap(find.text('Join Doctylia'));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome back, Doctor'), findsOneWidget);
+    expect(find.text('Welcome Back'), findsOneWidget);
 
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'doctor@gmail.com');
-    await tester.enterText(fields.at(1), 'wrong');
-    await tester.tap(find.text('Log In'));
+    final phoneField = find.byType(TextField).first;
+    await tester.enterText(phoneField, '9123456789');
+    await _tapVisible(tester, find.text('Send OTP'));
     await tester.pumpAndSettle();
-    expect(find.text('Incorrect email or password.'), findsOneWidget);
+    expect(
+      find.text('No Doctylia account is linked to this mobile number.'),
+      findsOneWidget,
+    );
 
-    await tester.enterText(fields.at(1), 'doctor123');
-    await tester.tap(find.text('Log In'));
+    await tester.enterText(phoneField, '9876543210');
+    await _tapVisible(tester, find.text('Send OTP'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter Code'), findsOneWidget);
+    expect(
+      find.textContaining('+91 98765 43210', findRichText: true),
+      findsOneWidget,
+    );
+
+    final codeField = find.byType(TextField);
+    await tester.enterText(codeField, '000000');
+    await tester.pumpAndSettle();
+    expect(
+      find.text('That code is incorrect or has expired. Request a new one.'),
+      findsOneWidget,
+    );
+
+    await tester.enterText(codeField, '123456');
     await tester.pumpAndSettle();
     expect(find.text('TOTAL PRACTICE REVENUE'), findsOneWidget);
     expect(find.text('124'), findsOneWidget);
@@ -62,7 +80,30 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Log Out'));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome back, Doctor'), findsOneWidget);
+    expect(find.text('Welcome Back'), findsOneWidget);
+  });
+
+  testWidgets('email login remains available behind the staff link', (
+    tester,
+  ) async {
+    final preferences = FakePreferencesStore({'has_seen_onboarding': true});
+    await tester.pumpWidget(_testApp(preferences));
+    await tester.pumpAndSettle();
+
+    await _tapVisible(tester, find.text('Doctor / Clinic Staff Login'));
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'doctor@gmail.com');
+    await tester.enterText(fields.at(1), 'wrong');
+    await _tapVisible(tester, find.text('Log In'));
+    await tester.pumpAndSettle();
+    expect(find.text('Incorrect email or password.'), findsOneWidget);
+
+    await tester.enterText(fields.at(1), 'doctor123');
+    await _tapVisible(tester, find.text('Log In'));
+    await tester.pumpAndSettle();
+    expect(find.text('TOTAL PRACTICE REVENUE'), findsOneWidget);
   });
 
   testWidgets('restores a persisted doctor directly to the protected route', (
@@ -172,7 +213,9 @@ void main() {
     await tester.pumpWidget(_testApp(preferences));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Forgot password?'));
+    await _tapVisible(tester, find.text('Doctor / Clinic Staff Login'));
+    await tester.pumpAndSettle();
+    await _tapVisible(tester, find.text('Forgot password?'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), 'doctor@gmail.com');
     await tester.tap(find.text('Send reset link'));
@@ -1050,4 +1093,11 @@ final class _FakeFileDownloadService implements FileDownloadService {
     lastFileName = fileName;
     lastBytes = bytes;
   }
+}
+
+/// Scrolls [finder] into the 800x600 test viewport before tapping it.
+Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
 }

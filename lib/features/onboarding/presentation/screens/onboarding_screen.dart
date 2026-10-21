@@ -1,6 +1,8 @@
+import 'package:doctylia_app/app/router/route_names.dart';
 import 'package:doctylia_app/features/onboarding/presentation/providers/onboarding_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -58,8 +60,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     super.dispose();
   }
 
-  Future<void> _complete() {
-    return ref.read(onboardingSeenProvider.notifier).complete();
+  Future<void> _complete() async {
+    await ref.read(onboardingSeenProvider.notifier).complete();
+    // Revisits from the login screen's Back button don't change the seen
+    // flag, so the router won't redirect on its own.
+    if (mounted) context.goNamed(RouteNames.login);
   }
 
   @override

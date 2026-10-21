@@ -89,6 +89,7 @@ flutter:
     - .env
     - assets/logo/
     - assets/images/onboarding/
+    - assets/images/login_screen_img.png
 
   fonts:
     - family: Inter

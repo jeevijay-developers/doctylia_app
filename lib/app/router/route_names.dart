@@ -2,6 +2,7 @@ abstract final class RouteNames {
   static const splash = 'splash';
   static const onboarding = 'onboarding';
   static const login = 'login';
+  static const otpVerify = 'otp-verify';
   static const forgotPassword = 'forgot-password';
   static const staffRejected = 'staff-rejected';
   static const accountError = 'account-error';
@@ -27,6 +28,7 @@ abstract final class RoutePaths {
   static const splash = '/splash';
   static const onboarding = '/onboarding';
   static const login = '/login';
+  static const otpVerify = '/login/verify';
   static const forgotPassword = '/forgot-password';
   static const staffRejected = '/doctor-only';
   static const accountError = '/account-error';

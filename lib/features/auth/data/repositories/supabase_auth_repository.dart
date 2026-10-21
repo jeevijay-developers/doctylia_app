@@ -70,6 +70,47 @@ final class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<Result<void>> sendPhoneOtp(String phone) {
+    return RepositoryGuard.run(() async {
+      try {
+        // Accounts are created on the web; never sign up from the app.
+        await _client.auth.signInWithOtp(phone: phone, shouldCreateUser: false);
+      } catch (error, stackTrace) {
+        throw SupabaseAuthErrorMapper.map(error, stackTrace);
+      }
+    });
+  }
+
+  @override
+  Future<Result<AccountLookup>> verifyPhoneOtp({
+    required String phone,
+    required String token,
+  }) {
+    return RepositoryGuard.run(() async {
+      try {
+        final response = await _client.auth.verifyOTP(
+          phone: phone,
+          token: token.trim(),
+          type: OtpType.sms,
+        );
+        final session = response.session;
+        if (session == null) {
+          throw const AuthFailure(
+            'We could not start your session. Please try again.',
+          );
+        }
+        return await _lookupAccount(
+          userId: session.user.id,
+          email: session.user.email ?? '',
+        );
+      } catch (error, stackTrace) {
+        if (error is AppFailure) rethrow;
+        throw SupabaseAuthErrorMapper.map(error, stackTrace);
+      }
+    });
+  }
+
+  @override
   Future<Result<void>> signOut() {
     return RepositoryGuard.run(() async {
       try {
@@ -177,9 +218,35 @@ abstract final class SupabaseAuthErrorMapper {
           stackTrace: stackTrace,
         );
       }
+      if (code == 'otp_expired' ||
+          code == 'invalid_otp' ||
+          message.contains('token has expired or is invalid')) {
+        return AuthFailure(
+          'That code is incorrect or has expired. Request a new one.',
+          cause: error,
+          stackTrace: stackTrace,
+        );
+      }
+      if (message.contains('signups not allowed')) {
+        return AuthFailure(
+          'No Doctylia account is linked to this mobile number.',
+          cause: error,
+          stackTrace: stackTrace,
+        );
+      }
+      if (code == 'phone_provider_disabled' ||
+          code == 'sms_send_failed' ||
+          code == 'otp_disabled') {
+        return AuthFailure(
+          'SMS sign-in is unavailable right now. Use email login instead.',
+          cause: error,
+          stackTrace: stackTrace,
+        );
+      }
       if (status == '429' ||
           code == 'over_request_rate_limit' ||
-          code == 'over_email_send_rate_limit') {
+          code == 'over_email_send_rate_limit' ||
+          code == 'over_sms_send_rate_limit') {
         return const RateLimitFailure();
       }
       if (error is AuthRetryableFetchException || _looksLikeNetwork(error)) {

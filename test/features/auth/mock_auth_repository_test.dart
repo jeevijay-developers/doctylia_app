@@ -40,6 +40,32 @@ void main() {
       },
     );
 
+    test('phone OTP accepts only the mock number and code', () async {
+      final unknown = await repository.sendPhoneOtp('+910000000000');
+      expect(unknown, isA<Failure>());
+
+      final sent = await repository.sendPhoneOtp(
+        MockAuthRepository.doctorPhone,
+      );
+      expect(sent, isA<Success>());
+
+      final wrongCode = await repository.verifyPhoneOtp(
+        phone: MockAuthRepository.doctorPhone,
+        token: '000000',
+      );
+      expect(wrongCode, isA<Failure>());
+      expect((wrongCode as Failure).failure, isA<AuthFailure>());
+
+      final verified = await repository.verifyPhoneOtp(
+        phone: MockAuthRepository.doctorPhone,
+        token: MockAuthRepository.doctorOtp,
+      );
+      expect(verified, isA<Success>());
+
+      final restored = await MockAuthRepository(preferences).restoreSession();
+      expect((restored as Success).value, isNotNull);
+    });
+
     test('sign out clears the persisted session', () async {
       await repository.signIn(
         email: MockAuthRepository.doctorEmail,

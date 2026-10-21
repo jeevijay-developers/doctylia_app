@@ -9,6 +9,14 @@ abstract interface class AuthRepository {
     required String password,
   });
 
+  /// Sends a one-time SMS code to an existing account's [phone] (E.164).
+  Future<Result<void>> sendPhoneOtp(String phone);
+
+  Future<Result<AccountLookup>> verifyPhoneOtp({
+    required String phone,
+    required String token,
+  });
+
   Future<Result<void>> signOut();
 
   Future<Result<void>> sendPasswordReset(String email);

@@ -12,6 +12,8 @@ final class MockAuthRepository implements AuthRepository {
 
   static const doctorEmail = 'doctor@gmail.com';
   static const doctorPassword = 'doctor123';
+  static const doctorPhone = '+919876543210';
+  static const doctorOtp = '123456';
   static const _sessionKey = 'mock_doctor_session';
   static const _emailKey = 'mock_doctor_email';
   static const _doctorId = '00000000-0000-4000-8000-000000000001';
@@ -54,6 +56,35 @@ final class MockAuthRepository implements AuthRepository {
       await _preferences.setBool(_sessionKey, true);
       await _preferences.setString(_emailKey, normalizedEmail);
       return _doctorLookup(normalizedEmail);
+    });
+  }
+
+  @override
+  Future<Result<void>> sendPhoneOtp(String phone) {
+    return RepositoryGuard.run(() {
+      if (phone != doctorPhone) {
+        throw const AuthFailure(
+          'No Doctylia account is linked to this mobile number.',
+        );
+      }
+      // Mock mode intentionally sends no SMS; the code is always [doctorOtp].
+    });
+  }
+
+  @override
+  Future<Result<AccountLookup>> verifyPhoneOtp({
+    required String phone,
+    required String token,
+  }) {
+    return RepositoryGuard.run(() async {
+      if (phone != doctorPhone || token.trim() != doctorOtp) {
+        throw const AuthFailure(
+          'That code is incorrect or has expired. Request a new one.',
+        );
+      }
+      await _preferences.setBool(_sessionKey, true);
+      await _preferences.setString(_emailKey, doctorEmail);
+      return _doctorLookup(doctorEmail);
     });
   }
 

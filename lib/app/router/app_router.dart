@@ -3,6 +3,7 @@ import 'package:doctylia_app/features/auth/presentation/providers/auth_providers
 import 'package:doctylia_app/features/auth/presentation/screens/account_rejection_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/screens/forgot_password_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/screens/login_screen.dart';
+import 'package:doctylia_app/features/auth/presentation/screens/otp_verification_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/screens/splash_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/screens/subscription_blocked_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/state/auth_state.dart';
@@ -79,7 +80,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
           final isPublicAuthRoute =
               location == RoutePaths.login ||
-              location == RoutePaths.forgotPassword;
+              location == RoutePaths.otpVerify ||
+              location == RoutePaths.forgotPassword ||
+              location == RoutePaths.onboarding;
           return isPublicAuthRoute ? null : RoutePaths.login;
       }
     },
@@ -98,6 +101,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.login,
         name: RouteNames.login,
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.otpVerify,
+        name: RouteNames.otpVerify,
+        redirect: (context, state) =>
+            state.extra is String ? null : RoutePaths.login,
+        builder: (context, state) =>
+            OtpVerificationScreen(phone: state.extra! as String),
       ),
       GoRoute(
         path: RoutePaths.forgotPassword,

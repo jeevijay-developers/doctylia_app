@@ -1,4 +1,5 @@
 import 'package:doctylia_app/app/providers/repository_overrides.dart';
+import 'package:doctylia_app/core/result/result.dart';
 import 'package:doctylia_app/core/storage/preferences_store.dart';
 import 'package:doctylia_app/features/auth/data/repositories/mock_auth_repository.dart';
 import 'package:doctylia_app/features/auth/domain/entities/account_lookup.dart';
@@ -41,10 +42,41 @@ class AuthController extends AsyncNotifier<AuthState> {
     );
   }
 
-  Future<void> signIn({required String email, required String password}) async {
+  Future<void> signIn({required String email, required String password}) {
+    return _completeSignIn(
+      () => _repository.signIn(email: email, password: password),
+    );
+  }
+
+  /// Returns a user-facing error message, or null once the SMS is sent.
+  Future<String?> sendPhoneOtp(String phone) async {
+    final result = await _repository.sendPhoneOtp(phone);
+    return result.fold(
+      onSuccess: (_) => null,
+      onFailure: (failure) => failure.userMessage,
+    );
+  }
+
+  Future<void> verifyPhoneOtp({required String phone, required String token}) {
+    return _completeSignIn(
+      () => _repository.verifyPhoneOtp(phone: phone, token: token),
+    );
+  }
+
+  /// Clears a stale sign-in error, e.g. when switching login methods.
+  void clearError() {
+    final current = state.value;
+    if (current == null || current.errorMessage == null) return;
+    if (current.status != AuthStatus.unauthenticated) return;
+    state = const AsyncData(AuthState.unauthenticated());
+  }
+
+  Future<void> _completeSignIn(
+    Future<Result<AccountLookup>> Function() attempt,
+  ) async {
     if (state.value?.isSubmitting ?? false) return;
     state = const AsyncData(AuthState.unauthenticated(isSubmitting: true));
-    final result = await _repository.signIn(email: email, password: password);
+    final result = await attempt();
     await result.fold(
       onSuccess: (lookup) async {
         state = AsyncData(await _resolveAndRejectIfNeeded(lookup));
