@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:doctylia_app/core/widgets/app_motion.dart';
 import 'package:doctylia_app/core/platform/external_link_service.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/widgets/whatsapp_icon.dart';
@@ -69,8 +70,10 @@ class RevenueCard extends StatelessWidget {
                         spacing: 8,
                         runSpacing: 4,
                         children: [
-                          Text(
-                            money.format(monthlyRevenue),
+                          AppCountUp(
+                            value: monthlyRevenue,
+                            format: (v) => money.format(v.round()),
+                            delay: const Duration(milliseconds: 750),
                             style: TextStyle(
                               color: AppColors.onSurface(context),
                               fontSize: 24,
@@ -103,7 +106,13 @@ class RevenueCard extends StatelessWidget {
             const SizedBox(height: 14),
             shadcn.Divider(color: DashboardTokens.border(context)),
             const SizedBox(height: 14),
-            SizedBox(height: 180, child: _RevenueLineChart(points: points)),
+            SizedBox(
+              height: 180,
+              child: AppReveal(
+                delay: const Duration(milliseconds: 800),
+                child: _RevenueLineChart(points: points),
+              ),
+            ),
           ],
         ),
       ),

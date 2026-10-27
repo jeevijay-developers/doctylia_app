@@ -37,9 +37,24 @@ class ReviewStats {
     required this.averageRating,
     required this.verified,
     required this.pinned,
+    this.starCounts = const [0, 0, 0, 0, 0],
   });
   final int total;
   final double averageRating;
   final int verified;
   final int pinned;
+
+  /// Reviews per star level: index 0 = 1★ … index 4 = 5★.
+  final List<int> starCounts;
+
+  int countFor(int stars) => starCounts[stars - 1];
+
+  /// Counts 1–5★ ratings into [starCounts] order.
+  static List<int> countStars(Iterable<int> ratings) {
+    final counts = List.filled(5, 0);
+    for (final rating in ratings) {
+      if (rating >= 1 && rating <= 5) counts[rating - 1]++;
+    }
+    return List.unmodifiable(counts);
+  }
 }

@@ -41,6 +41,23 @@ final class RateLimitFailure extends AppFailure {
     : super('Too many attempts. Please wait a moment and try again.');
 }
 
+/// The server's per-number SMS cooldown is still running; the previously
+/// sent code stays valid meanwhile.
+final class OtpCooldownFailure extends AppFailure {
+  OtpCooldownFailure(this.retryAfterSeconds, {super.cause, super.stackTrace})
+    : super(
+        'Please wait ${retryAfterSeconds}s before requesting another code.',
+      );
+
+  final int retryAfterSeconds;
+}
+
+/// Phone OTP login for a number with no Doctylia account (signup is web-only).
+final class PhoneNotRegisteredFailure extends AppFailure {
+  const PhoneNotRegisteredFailure({super.cause, super.stackTrace})
+    : super('No account found with this phone number.');
+}
+
 final class ConflictFailure extends AppFailure {
   const ConflictFailure(super.userMessage, {super.cause});
 }

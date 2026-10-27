@@ -4,6 +4,7 @@ import 'package:doctylia_app/features/auth/presentation/screens/account_rejectio
 import 'package:doctylia_app/features/auth/presentation/screens/forgot_password_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/screens/login_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/screens/otp_verification_screen.dart';
+import 'package:doctylia_app/features/auth/presentation/screens/signup_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/screens/splash_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/screens/subscription_blocked_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/state/auth_state.dart';
@@ -16,6 +17,7 @@ import 'package:doctylia_app/features/dashboard/presentation/screens/more_screen
 import 'package:doctylia_app/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:doctylia_app/features/onboarding/presentation/providers/onboarding_providers.dart';
 import 'package:doctylia_app/features/onboarding/presentation/screens/onboarding_screen.dart';
+import 'package:doctylia_app/features/practice_setup/presentation/screens/practice_setup_screen.dart';
 import 'package:doctylia_app/features/inquiries/presentation/screens/inquiries_screen.dart';
 import 'package:doctylia_app/features/patients/presentation/screens/patient_medical_record_screen.dart';
 import 'package:doctylia_app/features/patients/presentation/screens/patients_screen.dart';
@@ -29,6 +31,15 @@ import 'package:doctylia_app/shared/entitlements/plan_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+/// Session restore usually finishes within a few frames, which would skip
+/// the animated splash entirely (only the native launch window would show).
+/// Holding `/splash` for at least this long lets its intro play once.
+const splashMinimumDuration = Duration(milliseconds: 2200);
+
+final splashMinimumElapsedProvider = FutureProvider<void>(
+  (ref) => Future<void>.delayed(splashMinimumDuration),
+);
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   late final GoRouter router;
   router = GoRouter(
@@ -36,9 +47,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final authAsync = ref.read(authControllerProvider);
       final onboardingAsync = ref.read(onboardingSeenProvider);
+      final splashElapsed = ref.read(splashMinimumElapsedProvider);
       final location = state.matchedLocation;
 
-      if (authAsync.isLoading || onboardingAsync.isLoading) {
+      if (authAsync.isLoading ||
+          onboardingAsync.isLoading ||
+          splashElapsed.isLoading) {
         return location == RoutePaths.splash ? null : RoutePaths.splash;
       }
 
@@ -49,6 +63,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       switch (auth.status) {
         case AuthStatus.authenticatedDoctor:
           final session = auth.session!;
+          // Like the web's post-login check: a doctor who hasn't finished
+          // practice setup (new signup) completes it once before anything
+          // else. onboarding_completed is per account, so it never shows
+          // again on either platform.
+          final profile = session.profile;
+          if (profile != null && !profile.onboardingCompleted) {
+            return location == RoutePaths.practiceSetup
+                ? null
+                : RoutePaths.practiceSetup;
+          }
           final access = TrialAccessResolver.resolve(
             status: session.planStatus,
             trialEnd: session.trialEnd,
@@ -80,6 +104,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
           final isPublicAuthRoute =
               location == RoutePaths.login ||
+              location == RoutePaths.signup ||
               location == RoutePaths.otpVerify ||
               location == RoutePaths.forgotPassword ||
               location == RoutePaths.onboarding;
@@ -106,9 +131,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.otpVerify,
         name: RouteNames.otpVerify,
         redirect: (context, state) =>
-            state.extra is String ? null : RoutePaths.login,
+            OtpRequest.fromExtra(state.extra) == null ? RoutePaths.login : null,
         builder: (context, state) =>
-            OtpVerificationScreen(phone: state.extra! as String),
+            OtpVerificationScreen(request: OtpRequest.fromExtra(state.extra)!),
+      ),
+      GoRoute(
+        path: RoutePaths.practiceSetup,
+        name: RouteNames.practiceSetup,
+        builder: (context, state) => const PracticeSetupScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.signup,
+        name: RouteNames.signup,
+        builder: (context, state) =>
+            SignupScreen(prefill: SignupPrefill.fromExtra(state.extra)),
       ),
       GoRoute(
         path: RoutePaths.forgotPassword,
@@ -235,6 +271,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   ref.listen(authControllerProvider, (_, _) => router.refresh());
   ref.listen(onboardingSeenProvider, (_, _) => router.refresh());
+  ref.listen(splashMinimumElapsedProvider, (_, _) => router.refresh());
   ref.onDispose(router.dispose);
   return router;
 });

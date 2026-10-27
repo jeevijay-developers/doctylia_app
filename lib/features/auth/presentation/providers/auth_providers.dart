@@ -1,4 +1,5 @@
 import 'package:doctylia_app/app/providers/repository_overrides.dart';
+import 'package:doctylia_app/core/errors/app_failure.dart';
 import 'package:doctylia_app/core/result/result.dart';
 import 'package:doctylia_app/core/storage/preferences_store.dart';
 import 'package:doctylia_app/features/auth/data/repositories/mock_auth_repository.dart';
@@ -42,19 +43,44 @@ class AuthController extends AsyncNotifier<AuthState> {
     );
   }
 
-  Future<void> signIn({required String email, required String password}) {
+  /// `captchaToken` (here and below): the Turnstile token Supabase Auth
+  /// requires for password, OTP and reset requests.
+  Future<void> signIn({
+    required String email,
+    required String password,
+    String? captchaToken,
+  }) {
     return _completeSignIn(
-      () => _repository.signIn(email: email, password: password),
+      () => _repository.signIn(
+        email: email,
+        password: password,
+        captchaToken: captchaToken,
+      ),
     );
   }
 
-  /// Returns a user-facing error message, or null once the SMS is sent.
-  Future<String?> sendPhoneOtp(String phone) async {
-    final result = await _repository.sendPhoneOtp(phone);
-    return result.fold(
-      onSuccess: (_) => null,
-      onFailure: (failure) => failure.userMessage,
+  /// Returns the failure (e.g. [PhoneNotRegisteredFailure] or
+  /// [OtpCooldownFailure]), or null once the SMS is sent.
+  Future<AppFailure?> sendPhoneOtp(String phone, {String? captchaToken}) async {
+    final result = await _repository.sendPhoneOtp(
+      phone,
+      captchaToken: captchaToken,
     );
+    return result.fold(onSuccess: (_) => null, onFailure: (failure) => failure);
+  }
+
+  /// Signup counterpart of [sendPhoneOtp]; null once the SMS is sent.
+  Future<AppFailure?> sendSignupOtp({
+    required String phone,
+    required String fullName,
+    String? captchaToken,
+  }) async {
+    final result = await _repository.sendSignupOtp(
+      phone: phone,
+      fullName: fullName,
+      captchaToken: captchaToken,
+    );
+    return result.fold(onSuccess: (_) => null, onFailure: (failure) => failure);
   }
 
   Future<void> verifyPhoneOtp({required String phone, required String token}) {
@@ -90,8 +116,14 @@ class AuthController extends AsyncNotifier<AuthState> {
     );
   }
 
-  Future<String?> requestPasswordReset(String email) async {
-    final result = await _repository.sendPasswordReset(email);
+  Future<String?> requestPasswordReset(
+    String email, {
+    String? captchaToken,
+  }) async {
+    final result = await _repository.sendPasswordReset(
+      email,
+      captchaToken: captchaToken,
+    );
     return result.fold(
       onSuccess: (_) => null,
       onFailure: (failure) => failure.userMessage,

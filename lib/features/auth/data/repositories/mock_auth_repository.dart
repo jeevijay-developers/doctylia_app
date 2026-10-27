@@ -47,6 +47,7 @@ final class MockAuthRepository implements AuthRepository {
   Future<Result<AccountLookup>> signIn({
     required String email,
     required String password,
+    String? captchaToken,
   }) {
     return RepositoryGuard.run(() async {
       final normalizedEmail = email.trim().toLowerCase();
@@ -60,14 +61,24 @@ final class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<Result<void>> sendPhoneOtp(String phone) {
+  Future<Result<void>> sendPhoneOtp(String phone, {String? captchaToken}) {
     return RepositoryGuard.run(() {
-      if (phone != doctorPhone) {
-        throw const AuthFailure(
-          'No Doctylia account is linked to this mobile number.',
-        );
-      }
+      if (phone != doctorPhone) throw const PhoneNotRegisteredFailure();
       // Mock mode intentionally sends no SMS; the code is always [doctorOtp].
+    });
+  }
+
+  @override
+  Future<Result<void>> sendSignupOtp({
+    required String phone,
+    required String fullName,
+    String? captchaToken,
+  }) {
+    return RepositoryGuard.run(() {
+      if (fullName.trim().isEmpty) {
+        throw const ValidationFailure('Enter your full name.');
+      }
+      // Mock mode sends no SMS; verify [doctorPhone] with [doctorOtp].
     });
   }
 
@@ -97,7 +108,7 @@ final class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<Result<void>> sendPasswordReset(String email) {
+  Future<Result<void>> sendPasswordReset(String email, {String? captchaToken}) {
     return RepositoryGuard.run(() {
       final normalizedEmail = email.trim();
       final looksValid =

@@ -225,7 +225,11 @@ class _PlanCard extends ConsumerWidget {
   final SubscriptionDetails subscription;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Every button is locked during a checkout; only the plan being paid
+    // for says "Processing…".
     final checkoutBusy = ref.watch(settingsCheckoutBusyProvider);
+    final processing =
+        checkoutBusy && ref.watch(settingsCheckoutTierProvider) == tier;
     final features = tier == PlanTier.premium
         ? [
             'Everything in Pro',
@@ -245,7 +249,7 @@ class _PlanCard extends ConsumerWidget {
         ? 'Renew / Schedule'
         : subscription.status == PlanStatus.active
         ? (tier == PlanTier.premium ? 'Upgrade to Premium' : 'Switch to Pro')
-        : 'Reactivate';
+        : 'Upgrade';
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -316,7 +320,7 @@ class _PlanCard extends ConsumerWidget {
                 onPressed: checkoutBusy
                     ? null
                     : () => showPlanCheckout(context, ref, tier, subscription),
-                child: Text(checkoutBusy ? 'Processing…' : button),
+                child: Text(processing ? 'Processing…' : button),
               ),
             ),
           ],

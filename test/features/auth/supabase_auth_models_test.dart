@@ -51,6 +51,58 @@ void main() {
     });
   });
 
+  group('SupabaseAuthErrorMapper.mapPhoneOtp', () {
+    AppFailure mapPhone(AuthException error) =>
+        SupabaseAuthErrorMapper.mapPhoneOtp(error, StackTrace.empty);
+
+    test('unregistered number offers signup like the web', () {
+      final failure = mapPhone(
+        const AuthApiException(
+          'Signups not allowed for otp',
+          statusCode: '422',
+          code: 'otp_disabled',
+        ),
+      );
+      expect(failure, isA<PhoneNotRegisteredFailure>());
+      expect(failure.userMessage, 'No account found with this phone number.');
+    });
+
+    test('server resend cooldown carries the remaining seconds', () {
+      final failure = mapPhone(
+        const AuthApiException(
+          'For security purposes, you can only request this after 27 seconds.',
+          statusCode: '429',
+          code: 'over_sms_send_rate_limit',
+        ),
+      );
+      expect(failure, isA<OtpCooldownFailure>());
+      expect((failure as OtpCooldownFailure).retryAfterSeconds, 27);
+      expect(
+        failure.userMessage,
+        'Please wait 27s before requesting another code.',
+      );
+    });
+
+    test('wrong code and SMS hook errors', () {
+      final wrong = mapPhone(
+        const AuthApiException(
+          'Token has expired or is invalid',
+          statusCode: '403',
+          code: 'otp_expired',
+        ),
+      );
+      final hook = mapPhone(
+        const AuthApiException(
+          'Could not send OTP. Please try again.',
+          statusCode: '500',
+          code: 'unexpected_failure',
+        ),
+      );
+      expect(wrong.userMessage, 'Incorrect or expired code. Try again.');
+      expect(hook.userMessage, 'Could not send OTP. Please try again.');
+    });
+  });
+
   test('DoctorProfile maps the complete generated profiles row', () {
     final profile = DoctorProfile.fromJson({
       'id': 'doctor-id',

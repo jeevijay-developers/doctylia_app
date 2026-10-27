@@ -1,3 +1,4 @@
+import 'package:doctylia_app/core/widgets/app_motion.dart';
 import 'package:doctylia_app/core/platform/external_link_service.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
@@ -56,105 +57,108 @@ class _AppointmentCardState extends ConsumerState<AppointmentCard> {
         !writeDisabled && _actionableStatuses.contains(appointment.status);
     final selectedForBulk = widget.selectionMode && widget.selected;
     return DashboardShadcnScope(
-      child: shadcn.Card(
-        padding: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        borderRadius: BorderRadius.circular(DashboardTokens.radius),
-        borderColor: selectedForBulk
-            ? DashboardTokens.teal.withValues(alpha: 0.6)
-            : DashboardTokens.border(context),
-        boxShadow: DashboardTokens.shadow(context),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header + body form the tap target; the footer buttons sit
-            // outside it so they stay independently tappable.
-            Material(
-              type: MaterialType.transparency,
-              child: InkWell(
-                onTap: widget.selectionMode
-                    ? widget.onSelected
-                    : () => showAppointmentDetails(context, appointment),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _CardHeader(
-                        appointment: appointment,
-                        color: color,
-                        selectionMode: widget.selectionMode,
-                        selected: widget.selected,
-                        onSelected: widget.onSelected,
-                      ),
-                      const SizedBox(height: 12),
-                      _MetadataGrid(appointment: appointment),
-                    ],
+      child: AppPressScale(
+        builder: (onHighlight) => shadcn.Card(
+          padding: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(DashboardTokens.radius),
+          borderColor: selectedForBulk
+              ? DashboardTokens.teal.withValues(alpha: 0.6)
+              : DashboardTokens.border(context),
+          boxShadow: DashboardTokens.shadow(context),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header + body form the tap target; the footer buttons sit
+              // outside it so they stay independently tappable.
+              Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onHighlightChanged: onHighlight,
+                  onTap: widget.selectionMode
+                      ? widget.onSelected
+                      : () => showAppointmentDetails(context, appointment),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _CardHeader(
+                          appointment: appointment,
+                          color: color,
+                          selectionMode: widget.selectionMode,
+                          selected: widget.selected,
+                          onSelected: widget.onSelected,
+                        ),
+                        const SizedBox(height: 12),
+                        _MetadataGrid(appointment: appointment),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (!widget.selectionMode) ...[
-              shadcn.Divider(color: DashboardTokens.border(context)),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 12, 10),
-                child: _busy
-                    ? const Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: EdgeInsets.all(8),
-                          child: SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: DashboardTokens.teal,
+              if (!widget.selectionMode) ...[
+                shadcn.Divider(color: DashboardTokens.border(context)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 12, 10),
+                  child: _busy
+                      ? const Align(
+                          alignment: Alignment.centerRight,
+                          child: Padding(
+                            padding: EdgeInsets.all(8),
+                            child: SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: DashboardTokens.teal,
+                              ),
                             ),
                           ),
-                        ),
-                      )
-                    : Wrap(
-                        alignment: WrapAlignment.end,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          if (canAct) ...[
-                            shadcn.GhostButton(
-                              onPressed: _cancel,
-                              size: shadcn.ButtonSize.small,
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(
-                                  color: AppColors.destructive,
-                                  fontWeight: FontWeight.w600,
+                        )
+                      : Wrap(
+                          alignment: WrapAlignment.end,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            if (canAct) ...[
+                              shadcn.GhostButton(
+                                onPressed: _cancel,
+                                size: shadcn.ButtonSize.small,
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    color: AppColors.destructive,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                            ),
-                            shadcn.OutlineButton(
-                              onPressed: _reschedule,
+                              shadcn.OutlineButton(
+                                onPressed: _reschedule,
+                                size: shadcn.ButtonSize.small,
+                                leading: const Icon(
+                                  Icons.event_repeat_rounded,
+                                  size: 14,
+                                ),
+                                child: const Text('Reschedule'),
+                              ),
+                            ],
+                            shadcn.PrimaryButton(
+                              onPressed: () =>
+                                  showAppointmentDetails(context, appointment),
                               size: shadcn.ButtonSize.small,
-                              leading: const Icon(
-                                Icons.event_repeat_rounded,
+                              trailing: const Icon(
+                                Icons.arrow_forward_rounded,
                                 size: 14,
                               ),
-                              child: const Text('Reschedule'),
+                              child: const Text('View Details'),
                             ),
                           ],
-                          shadcn.PrimaryButton(
-                            onPressed: () =>
-                                showAppointmentDetails(context, appointment),
-                            size: shadcn.ButtonSize.small,
-                            trailing: const Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 14,
-                            ),
-                            child: const Text('View Details'),
-                          ),
-                        ],
-                      ),
-              ),
+                        ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

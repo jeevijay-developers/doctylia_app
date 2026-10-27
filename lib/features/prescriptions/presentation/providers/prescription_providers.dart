@@ -5,6 +5,7 @@ import 'package:doctylia_app/core/realtime/repository_change_coordinator.dart';
 import 'package:doctylia_app/core/result/result.dart';
 import 'package:doctylia_app/features/prescriptions/data/repositories/mock_prescription_repository.dart';
 import 'package:doctylia_app/features/prescriptions/domain/entities/prescription.dart';
+import 'package:doctylia_app/features/prescriptions/domain/entities/prescription_status.dart';
 import 'package:doctylia_app/features/prescriptions/domain/repositories/prescription_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,6 +28,24 @@ final prescriptionPatientsProvider = FutureProvider<List<PrescriptionPatient>>((
   );
   ref.onDispose(subscription.cancel);
   final result = await repository.listPatients();
+  return result.fold(
+    onSuccess: (value) => value,
+    onFailure: (failure) => throw failure,
+  );
+});
+
+/// Metric-strip counts. Read-only; refetched on realtime changes (covers
+/// web edits) and whenever the list's total changes after a create/delete.
+final prescriptionSummaryProvider = FutureProvider<PrescriptionSummary>((
+  ref,
+) async {
+  ref.watch(prescriptionsProvider.select((state) => state.value?.totalCount));
+  final repository = ref.watch(prescriptionRepositoryProvider);
+  final subscription = repository.watchChanges().listen(
+    (_) => ref.invalidateSelf(),
+  );
+  ref.onDispose(subscription.cancel);
+  final result = await repository.summary(now: DateTime.now());
   return result.fold(
     onSuccess: (value) => value,
     onFailure: (failure) => throw failure,

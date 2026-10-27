@@ -1,15 +1,14 @@
-import 'dart:io';
 
+import 'package:doctylia_app/core/platform/shared_file_cache.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
+import 'package:doctylia_app/features/auth/domain/entities/doctor_profile.dart';
 import 'package:doctylia_app/features/auth/presentation/providers/auth_providers.dart';
 import 'package:doctylia_app/features/billing/application/invoice_pdf_service.dart';
 import 'package:doctylia_app/features/billing/domain/entities/billing_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 void showInvoiceSheet(BuildContext context, Invoice invoice) =>
     showModalBottomSheet<void>(
@@ -160,12 +159,11 @@ class _InvoiceViewState extends ConsumerState<_InvoiceView> {
           width: double.infinity,
           child: FilledButton.icon(
             onPressed: generating || profile == null ? null : _sharePdf,
-            icon: generating
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.picture_as_pdf_outlined),
+            icon: Icon(
+              generating
+                  ? Icons.hourglass_top_rounded
+                  : Icons.picture_as_pdf_outlined,
+            ),
             label: Text(generating ? 'Generating...' : 'Share Invoice PDF'),
           ),
         ),
@@ -178,20 +176,7 @@ class _InvoiceViewState extends ConsumerState<_InvoiceView> {
     if (profile == null || generating) return;
     setState(() => generating = true);
     try {
-      final bytes = await InvoicePdfService.generate(widget.invoice, profile);
-      final directory = await getTemporaryDirectory();
-      final safeNumber = widget.invoice.invoiceNumber.replaceAll(
-        RegExp('[^a-zA-Z0-9_-]+'),
-        '-',
-      );
-      final path = '${directory.path}${Platform.pathSeparator}$safeNumber.pdf';
-      await File(path).writeAsBytes(bytes, flush: true);
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(path, mimeType: 'application/pdf')],
-          subject: 'Invoice ${widget.invoice.invoiceNumber}',
-        ),
-      );
+      await shareInvoicePdf(widget.invoice, profile);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -239,5 +224,21 @@ class _AmountRow extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+/// Generates [invoice]'s PDF and opens the system share sheet. Throws on
+/// failure; callers show their own error message.
+Future<void> shareInvoicePdf(Invoice invoice, DoctorProfile profile) async {
+  final bytes = await InvoicePdfService.generate(invoice, profile);
+  final safeNumber = invoice.invoiceNumber.replaceAll(
+    RegExp('[^a-zA-Z0-9_-]+'),
+    '-',
+  );
+  await SharedFileCache.shareBytes(
+    fileName: '$safeNumber.pdf',
+    bytes: bytes,
+    mimeType: 'application/pdf',
+    subject: 'Invoice ${invoice.invoiceNumber}',
   );
 }

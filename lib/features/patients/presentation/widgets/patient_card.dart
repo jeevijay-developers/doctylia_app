@@ -1,3 +1,4 @@
+import 'package:doctylia_app/core/widgets/app_motion.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/features/dashboard/presentation/widgets/dashboard_ui.dart';
 import 'package:doctylia_app/features/patients/domain/entities/patient.dart';
@@ -55,54 +56,57 @@ class PatientCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusColor = patientStatusColor(patient);
     return DashboardShadcnScope(
-      child: shadcn.Card(
-        padding: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        borderRadius: BorderRadius.circular(DashboardTokens.radius),
-        borderColor: selectionMode && selected
-            ? DashboardTokens.teal.withValues(alpha: 0.6)
-            : DashboardTokens.border(context),
-        boxShadow: DashboardTokens.shadow(context),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header + body are the card's tap target (transparent Material
-            // keeps the ripple above the card surface); footer buttons sit
-            // outside it so they stay independently tappable.
-            Material(
-              type: MaterialType.transparency,
-              child: InkWell(
-                onTap: onTap,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _IdentityHeader(
-                        patient: patient,
-                        statusColor: statusColor,
-                        selectionMode: selectionMode,
-                        selected: selected,
-                        onSelectionChanged: onSelectionChanged,
-                      ),
-                      const SizedBox(height: 12),
-                      _DemographicsStrip(patient: patient),
-                    ],
+      child: AppPressScale(
+        builder: (onHighlight) => shadcn.Card(
+          padding: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(DashboardTokens.radius),
+          borderColor: selectionMode && selected
+              ? DashboardTokens.teal.withValues(alpha: 0.6)
+              : DashboardTokens.border(context),
+          boxShadow: DashboardTokens.shadow(context),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header + body are the card's tap target (transparent Material
+              // keeps the ripple above the card surface); footer buttons sit
+              // outside it so they stay independently tappable.
+              Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: onTap,
+                  onHighlightChanged: onHighlight,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _IdentityHeader(
+                          patient: patient,
+                          statusColor: statusColor,
+                          selectionMode: selectionMode,
+                          selected: selected,
+                          onSelectionChanged: onSelectionChanged,
+                        ),
+                        const SizedBox(height: 12),
+                        _DemographicsStrip(patient: patient),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (!selectionMode) ...[
-              shadcn.Divider(color: DashboardTokens.border(context)),
-              _ActionFooter(
-                onCall: patient.phone.trim().isEmpty ? null : onCall,
-                onEdit: onEdit,
-                onBookVisit: onBookVisit,
-                onCreatePrescription: onCreatePrescription,
-                onOpenRecords: onTap,
-              ),
+              if (!selectionMode) ...[
+                shadcn.Divider(color: DashboardTokens.border(context)),
+                _ActionFooter(
+                  onCall: patient.phone.trim().isEmpty ? null : onCall,
+                  onEdit: onEdit,
+                  onBookVisit: onBookVisit,
+                  onCreatePrescription: onCreatePrescription,
+                  onOpenRecords: onTap,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

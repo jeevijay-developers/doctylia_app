@@ -25,6 +25,8 @@ final class SupabaseBlogRepository implements BlogRepository {
   Future<Result<PageResult<BlogPost>>> list(
     PageRequest page, {
     String search = '',
+    String? category,
+    bool? published,
   }) => _guard(() async {
     final term = search.replaceAll(RegExp(r'[,()%_]'), ' ').trim();
     dynamic rowsQuery = _client
@@ -37,6 +39,14 @@ final class SupabaseBlogRepository implements BlogRepository {
         .from('blog_posts')
         .count(CountOption.exact)
         .eq('doctor_id', _doctorId);
+    if (category != null) {
+      rowsQuery = rowsQuery.eq('category', category);
+      countQuery = countQuery.eq('category', category);
+    }
+    if (published != null) {
+      rowsQuery = rowsQuery.eq('is_published', published);
+      countQuery = countQuery.eq('is_published', published);
+    }
     if (term.isNotEmpty) {
       final filter = 'title.ilike.%$term%,category.ilike.%$term%';
       rowsQuery = rowsQuery.or(filter);
@@ -57,6 +67,23 @@ final class SupabaseBlogRepository implements BlogRepository {
       nextOffset: hasMore ? page.offset + page.limit : null,
       totalCount: total,
     );
+  });
+
+  @override
+  Future<Result<BlogStats>> getStats() => _guard(() async {
+    // Head-only counts: no rows are transferred.
+    final counts = await Future.wait<dynamic>([
+      _client
+          .from('blog_posts')
+          .count(CountOption.exact)
+          .eq('doctor_id', _doctorId),
+      _client
+          .from('blog_posts')
+          .count(CountOption.exact)
+          .eq('doctor_id', _doctorId)
+          .eq('is_published', true),
+    ]);
+    return BlogStats(total: counts[0] as int, published: counts[1] as int);
   });
 
   @override

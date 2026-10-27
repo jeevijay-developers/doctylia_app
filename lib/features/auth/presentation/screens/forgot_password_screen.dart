@@ -1,4 +1,5 @@
 import 'package:doctylia_app/app/router/route_names.dart';
+import 'package:doctylia_app/core/security/turnstile.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/core/widgets/doctylia_brand_mark.dart';
 import 'package:doctylia_app/features/auth/presentation/providers/auth_providers.dart';
@@ -15,7 +16,8 @@ class ForgotPasswordScreen extends ConsumerStatefulWidget {
   }
 }
 
-class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
+class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
+    with TurnstileGate<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   bool _submitting = false;
@@ -30,13 +32,17 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (captchaMissing()) return;
     setState(() {
       _submitting = true;
       _error = null;
     });
     final error = await ref
         .read(authControllerProvider.notifier)
-        .requestPasswordReset(_emailController.text);
+        .requestPasswordReset(
+          _emailController.text,
+          captchaToken: spendCaptcha(),
+        );
     if (!mounted) return;
     setState(() {
       _submitting = false;
@@ -105,10 +111,16 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               return null;
             },
           ),
-          if (_error != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          TurnstileWidget(
+            action: 'reset-password',
+            controller: turnstile,
+            onToken: onCaptcha,
+          ),
+          if ((captchaError ?? _error) != null) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(
-              _error!,
+              (captchaError ?? _error)!,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ],

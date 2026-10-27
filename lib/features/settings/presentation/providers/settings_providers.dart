@@ -34,6 +34,21 @@ class SettingsCheckoutBusyController extends Notifier<bool> {
   void setBusy(bool value) => state = value;
 }
 
+/// The plan whose checkout is running (null when none), so only that plan
+/// card shows "Processing…". [settingsCheckoutBusyProvider] still locks
+/// every checkout button meanwhile.
+final settingsCheckoutTierProvider =
+    NotifierProvider<SettingsCheckoutTierController, PlanTier?>(
+      SettingsCheckoutTierController.new,
+    );
+
+class SettingsCheckoutTierController extends Notifier<PlanTier?> {
+  @override
+  PlanTier? build() => null;
+
+  void set(PlanTier? tier) => state = tier;
+}
+
 class SettingsController extends AsyncNotifier<SettingsSnapshot> {
   SettingsRepository get _repo => ref.read(settingsRepositoryProvider);
   @override

@@ -17,6 +17,15 @@ final blogRepositoryProvider = Provider<BlogRepository>((ref) {
   }
   return MockBlogRepository();
 });
+
+/// Practice-wide published / draft counts for the header.
+final blogStatsProvider = FutureProvider<BlogStats>((ref) async {
+  final result = await ref.read(blogRepositoryProvider).getStats();
+  return result.fold(
+    onSuccess: (value) => value,
+    onFailure: (failure) => throw failure,
+  );
+});
 final blogPostsProvider =
     AsyncNotifierProvider<BlogPostsController, PagedState<BlogPost>>(
       BlogPostsController.new,
@@ -24,19 +33,29 @@ final blogPostsProvider =
 
 class BlogPostsController extends AsyncNotifier<PagedState<BlogPost>> {
   String _search = '';
+  String? _category;
+  bool? _published;
   BlogRepository get _repo => ref.read(blogRepositoryProvider);
   @override
   Future<PagedState<BlogPost>> build() {
     final changes = RepositoryChangeCoordinator(
       changes: _repo.watchChanges(),
-      refresh: refresh,
+      refresh: () async {
+        ref.invalidate(blogStatsProvider);
+        await refresh();
+      },
     );
     ref.onDispose(changes.dispose);
     return _first();
   }
 
   Future<PagedState<BlogPost>> _first() async {
-    final result = await _repo.list(const PageRequest(), search: _search);
+    final result = await _repo.list(
+      const PageRequest(),
+      search: _search,
+      category: _category,
+      published: _published,
+    );
     return result.fold(
       onSuccess: (page) => PagedState(
         items: page.items,
@@ -53,12 +72,21 @@ class BlogPostsController extends AsyncNotifier<PagedState<BlogPost>> {
     await refresh();
   }
 
+  /// Topic ([category], exact) and status ([published]; null = all).
+  Future<void> filter({String? category, bool? published}) async {
+    _category = category;
+    _published = published;
+    await refresh();
+  }
+
   Future<void> loadMore() async {
     final current = state.value;
     if (current == null || !current.hasMore) return;
     final result = await _repo.list(
       PageRequest(offset: current.nextOffset!),
       search: _search,
+      category: _category,
+      published: _published,
     );
     state = result.fold(
       onSuccess: (page) => AsyncData(
@@ -85,6 +113,7 @@ class BlogPostsController extends AsyncNotifier<PagedState<BlogPost>> {
         );
     return result.fold(
       onSuccess: (saved) {
+        ref.invalidate(blogStatsProvider);
         final current = state.value;
         if (current == null) {
           unawaited(refresh());
@@ -122,6 +151,7 @@ class BlogPostsController extends AsyncNotifier<PagedState<BlogPost>> {
     final result = await _repo.delete(id);
     return result.fold(
       onSuccess: (_) {
+        ref.invalidate(blogStatsProvider);
         // Drop the row right away; the refresh then reconciles pagination.
         final current = state.value;
         if (current != null) {
@@ -159,7 +189,10 @@ class BlogPostsController extends AsyncNotifier<PagedState<BlogPost>> {
       onSuccess: (_) => null,
       onFailure: (failure) => failure.userMessage,
     );
-    if (error == null) await refresh();
+    if (error == null) {
+      ref.invalidate(blogStatsProvider);
+      await refresh();
+    }
     return error;
   }
 }

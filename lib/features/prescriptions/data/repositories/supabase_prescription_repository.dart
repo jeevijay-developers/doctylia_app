@@ -6,6 +6,7 @@ import 'package:doctylia_app/core/pagination/page_request.dart';
 import 'package:doctylia_app/core/pagination/page_result.dart';
 import 'package:doctylia_app/core/result/result.dart';
 import 'package:doctylia_app/features/prescriptions/domain/entities/prescription.dart';
+import 'package:doctylia_app/features/prescriptions/domain/entities/prescription_status.dart';
 import 'package:doctylia_app/features/prescriptions/domain/repositories/prescription_repository.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -62,6 +63,39 @@ final class SupabasePrescriptionRepository implements PrescriptionRepository {
       totalCount: total,
     );
   });
+
+  @override
+  Future<Result<PrescriptionSummary>> summary({required DateTime now}) =>
+      _guard(() async {
+        String day(DateTime value) => DateFormat('yyyy-MM-dd').format(value);
+        final today = DateTime(now.year, now.month, now.day);
+        final t = day(today);
+        final dueFrom = day(
+          today.subtract(const Duration(days: followUpWindowBefore)),
+        );
+        final dueTo = day(today.add(const Duration(days: followUpWindowAfter)));
+        dynamic count() => _client
+            .from('prescriptions')
+            .count(CountOption.exact)
+            .eq('doctor_id', _doctorId);
+        // Mirrors prescriptionStatusOf: active = (issued ≥ today or
+        // follow-up beyond the due window) minus those issued ≥ today whose
+        // follow-up is inside the window (those show as "Follow-up due").
+        final counts = await Future.wait<dynamic>([
+          count().or('date.gte.$t,follow_up_date.gt.$dueTo'),
+          count()
+              .gte('date', t)
+              .gte('follow_up_date', dueFrom)
+              .lte('follow_up_date', dueTo),
+          count().gte('follow_up_date', dueFrom).lte('follow_up_date', dueTo),
+          count().gte('date', day(startOfWeek(now))),
+        ]);
+        return PrescriptionSummary(
+          active: (counts[0] as int) - (counts[1] as int),
+          followUpsDue: counts[2] as int,
+          issuedThisWeek: counts[3] as int,
+        );
+      });
 
   @override
   Future<Result<Prescription>> create(PrescriptionDraft draft) =>

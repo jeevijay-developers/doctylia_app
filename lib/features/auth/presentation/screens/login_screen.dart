@@ -1,12 +1,14 @@
 import 'package:doctylia_app/app/router/route_names.dart';
-import 'package:doctylia_app/core/platform/external_link_service.dart';
+import 'package:doctylia_app/core/errors/app_failure.dart';
+import 'package:doctylia_app/core/security/turnstile.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:doctylia_app/features/auth/presentation/screens/otp_verification_screen.dart';
+import 'package:doctylia_app/features/auth/presentation/screens/signup_screen.dart';
 import 'package:doctylia_app/features/auth/presentation/state/auth_state.dart';
 import 'package:doctylia_app/features/auth/presentation/widgets/auth_widgets.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -17,7 +19,8 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with TurnstileGate<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
@@ -27,6 +30,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePassword = true;
   bool _isSendingOtp = false;
   String? _otpError;
+  bool _showSignupLink = false;
 
   @override
   void dispose() {
@@ -39,32 +43,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _sendOtp() async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (captchaMissing()) return;
     final phone = _country.toE164(_phoneController.text);
     setState(() {
       _isSendingOtp = true;
       _otpError = null;
+      _showSignupLink = false;
     });
-    final error = await ref
+    final failure = await ref
         .read(authControllerProvider.notifier)
-        .sendPhoneOtp(phone);
+        .sendPhoneOtp(phone, captchaToken: spendCaptcha());
     if (!mounted) return;
     setState(() {
       _isSendingOtp = false;
-      _otpError = error;
+      _otpError = failure?.userMessage;
+      _showSignupLink = failure is PhoneNotRegisteredFailure;
     });
-    if (error == null) {
-      context.pushNamed(RouteNames.otpVerify, extra: phone);
+    if (failure == null) {
+      context.pushNamed(
+        RouteNames.otpVerify,
+        extra: OtpRequest(phone: phone).toExtra(),
+      );
     }
   }
 
   Future<void> _signInWithEmail() async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (captchaMissing()) return;
     await ref
         .read(authControllerProvider.notifier)
         .signIn(
           email: _emailController.text,
           password: _passwordController.text,
+          captchaToken: spendCaptcha(),
         );
   }
 
@@ -74,6 +86,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() {
       _useEmail = !_useEmail;
       _otpError = null;
+      captchaError = null;
+      _showSignupLink = false;
     });
   }
 
@@ -85,43 +99,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  Future<void> _openSignup() async {
-    final opened = await ref
-        .read(externalLinkServiceProvider)
-        .open(Uri.parse('https://doctylia.com/auth?mode=signup'));
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open doctylia.com.')),
-      );
-    }
+  /// In-app signup. Like the web form, the typed number carries over.
+  void _openSignup() {
+    ref.read(authControllerProvider.notifier).clearError();
+    setState(() {
+      _otpError = null;
+      _showSignupLink = false;
+    });
+    context.pushNamed(
+      RouteNames.signup,
+      extra: SignupPrefill(
+        country: _country,
+        digits: _phoneController.text,
+      ).toExtra(),
+    );
   }
 
   Future<void> _pickCountry() async {
-    final picked = await showModalBottomSheet<AuthCountry>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            for (final country in AuthCountry.all)
-              ListTile(
-                leading: Text(
-                  country.flag,
-                  style: const TextStyle(fontSize: 24),
-                ),
-                title: Text(country.name),
-                trailing: Text(
-                  country.dialCode,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                selected: country == _country,
-                onTap: () => Navigator.of(context).pop(country),
-              ),
-          ],
-        ),
-      ),
-    );
+    final picked = await showAuthCountryPicker(context, selected: _country);
     if (picked == null || picked == _country) return;
     setState(() {
       _country = picked;
@@ -139,7 +134,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final auth = ref.watch(authControllerProvider);
     final authState = auth.value ?? const AuthState.unauthenticated();
     final isBusy = _isSendingOtp || authState.isSubmitting;
-    final error = _useEmail ? authState.errorMessage : _otpError;
+    final error =
+        captchaError ?? (_useEmail ? authState.errorMessage : _otpError);
 
     return Scaffold(
       body: SafeArea(
@@ -182,8 +178,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: AppSpacing.lg),
                       const _FeatureHighlights(),
                       const SizedBox(height: AppSpacing.lg),
+                      TurnstileWidget(
+                        action: 'login',
+                        controller: turnstile,
+                        onToken: onCaptcha,
+                      ),
+                      if (captchaEnabled) const SizedBox(height: AppSpacing.md),
                       if (error != null) ...[
                         AuthInlineError(message: error),
+                        if (!_useEmail && _showSignupLink)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              onPressed: _openSignup,
+                              child: const Text(
+                                'Sign up instead',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
                         const SizedBox(height: AppSpacing.md),
                       ],
                       AuthGradientButton(
@@ -256,28 +269,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return [
       Row(
         children: [
-          Text(
-            'Mobile Number',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface(context),
+          Expanded(
+            child: Text(
+              'Mobile Number',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface(context),
+              ),
             ),
           ),
-          const Spacer(),
           const Icon(Icons.bolt_rounded, size: 16, color: AppColors.primary600),
-          const Text(
-            'Instant Sign-in',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: AppColors.primary600,
+          const Flexible(
+            child: Text(
+              'Instant Sign-in',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.primary600,
+              ),
             ),
           ),
         ],
       ),
       const SizedBox(height: AppSpacing.xs),
-      _PhoneField(
+      AuthPhoneField(
         controller: _phoneController,
         country: _country,
         onPickCountry: _pickCountry,
@@ -348,149 +368,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
       ),
     ];
-  }
-}
-
-/// Country prefix (flag, dial code, chevron) + national number input.
-class _PhoneField extends StatelessWidget {
-  const _PhoneField({
-    required this.controller,
-    required this.country,
-    required this.onPickCountry,
-    required this.onSubmitted,
-  });
-
-  final TextEditingController controller;
-  final AuthCountry country;
-  final VoidCallback onPickCountry;
-  final VoidCallback onSubmitted;
-
-  @override
-  Widget build(BuildContext context) {
-    final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      borderSide: BorderSide.none,
-    );
-    return FormField<String>(
-      validator: (_) => country.validate(controller.text),
-      builder: (field) {
-        final hasError = field.hasError;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 58,
-              decoration: BoxDecoration(
-                color: AppColors.surface(context),
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                border: Border.all(
-                  color: hasError
-                      ? AppColors.destructive
-                      : AppColors.border(context).withValues(alpha: 0.5),
-                ),
-              ),
-              child: Row(
-                children: [
-                  InkWell(
-                    onTap: onPickCountry,
-                    borderRadius: const BorderRadius.horizontal(
-                      left: Radius.circular(AppRadius.lg),
-                    ),
-                    child: Semantics(
-                      button: true,
-                      label: 'Country code ${country.dialCode}, change',
-                      excludeSemantics: true,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                        ),
-                        child: Row(
-                          children: [
-                            Text(
-                              country.flag,
-                              style: const TextStyle(fontSize: 22),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              country.dialCode,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.onSurface(context),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 20,
-                              color: AppColors.mutedText(context),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 1.5,
-                    height: 26,
-                    color: AppColors.primary200,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      keyboardType: TextInputType.phone,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [
-                        AutofillHints.telephoneNumberNational,
-                      ],
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(country.maxDigits),
-                      ],
-                      onChanged: (value) {
-                        field.didChange(value);
-                        if (hasError) field.validate();
-                      },
-                      onSubmitted: (_) => onSubmitted(),
-                      style: TextStyle(
-                        fontSize: 18,
-                        letterSpacing: 0.5,
-                        color: AppColors.onSurface(context),
-                      ),
-                      decoration: InputDecoration(
-                        hintText: '98765 43210',
-                        hintStyle: TextStyle(
-                          fontSize: 18,
-                          color: AppColors.subtleText(context),
-                        ),
-                        filled: false,
-                        border: border,
-                        enabledBorder: border,
-                        focusedBorder: border,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (hasError)
-              Padding(
-                padding: const EdgeInsets.only(top: 6, left: AppSpacing.sm),
-                child: Text(
-                  field.errorText!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.destructive,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
   }
 }
 

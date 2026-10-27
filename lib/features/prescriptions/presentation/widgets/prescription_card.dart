@@ -1,18 +1,20 @@
-import 'dart:io';
 
 import 'package:doctylia_app/core/platform/file_download_service.dart';
+import 'package:doctylia_app/core/platform/shared_file_cache.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
+import 'package:doctylia_app/core/widgets/app_motion.dart';
+import 'package:doctylia_app/features/dashboard/presentation/widgets/dashboard_ui.dart';
 import 'package:doctylia_app/features/auth/presentation/providers/auth_providers.dart';
 import 'package:doctylia_app/features/prescriptions/application/prescription_pdf_service.dart';
 import 'package:doctylia_app/features/prescriptions/domain/entities/prescription.dart';
+import 'package:doctylia_app/features/prescriptions/domain/entities/prescription_status.dart';
 import 'package:doctylia_app/features/prescriptions/presentation/providers/prescription_providers.dart';
 import 'package:doctylia_app/features/prescriptions/presentation/widgets/prescription_form_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
 class PrescriptionCard extends ConsumerStatefulWidget {
   const PrescriptionCard({
@@ -41,7 +43,9 @@ class _PrescriptionCardState extends ConsumerState<PrescriptionCard> {
     final doctor = ref.watch(doctorProfileProvider);
     return _PrescriptionCardContent(
       prescription: prescription,
+      status: prescriptionStatusOf(prescription),
       doctorName: doctor?.fullName,
+      doctorSpecialty: doctor?.specialization,
       digitallySigned: doctor?.signatureUrl?.trim().isNotEmpty == true,
       generating: generating,
       selectionMode: widget.selectionMode,
@@ -50,7 +54,24 @@ class _PrescriptionCardState extends ConsumerState<PrescriptionCard> {
       onOpen: _details,
       onShare: _sharePdf,
       onDownload: _downloadPdf,
+      onRenew: widget.readOnly ? null : _renew,
     );
+  }
+
+  /// Opens the form prefilled from this prescription; saves a new one
+  /// dated today, leaving this record unchanged.
+  Future<void> _renew() async {
+    ref.invalidate(prescriptionPatientsProvider);
+    final renewed = await showPrescriptionForm(
+      context,
+      ref,
+      template: prescription,
+    );
+    if (renewed != null && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Prescription renewed')));
+    }
   }
 
   Future<void> _details() => showModalBottomSheet<void>(
@@ -293,16 +314,11 @@ class _PrescriptionCardState extends ConsumerState<PrescriptionCard> {
             prescription: prescription,
             details: details,
           );
-          final directory = await getTemporaryDirectory();
-          final file = File(
-            '${directory.path}${Platform.pathSeparator}prescription-${prescription.id}.pdf',
-          );
-          await file.writeAsBytes(bytes, flush: true);
-          await SharePlus.instance.share(
-            ShareParams(
-              files: [XFile(file.path, mimeType: 'application/pdf')],
-              subject: 'Prescription for ${prescription.patientName}',
-            ),
+          await SharedFileCache.shareBytes(
+            fileName: 'prescription-${prescription.id}.pdf',
+            bytes: bytes,
+            mimeType: 'application/pdf',
+            subject: 'Prescription for ${prescription.patientName}',
           );
         } catch (_) {
           if (mounted) {
@@ -345,10 +361,7 @@ class _PrescriptionCardState extends ConsumerState<PrescriptionCard> {
           );
           await ref
               .read(fileDownloadServiceProvider)
-              .savePdf(
-                fileName: _PrescriptionCardContent._pdfFileName(prescription),
-                bytes: bytes,
-              );
+              .savePdf(fileName: _pdfFileName(prescription), bytes: bytes);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Prescription downloaded.')),
@@ -416,9 +429,101 @@ class _PrescriptionCardState extends ConsumerState<PrescriptionCard> {
   }
 }
 
+/// PDF file name for download/share: `Prescription_12Oct_Ananya_Sharma.pdf`.
+String _pdfFileName(Prescription value) {
+  final patient = value.patientName
+      .trim()
+      .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+  final date = DateFormat('dMMM').format(value.date);
+  return 'Prescription_${date}_${patient.isEmpty ? 'Patient' : patient}.pdf';
+}
+
+(String, Color, IconData) _statusStyle(
+  BuildContext context,
+  PrescriptionStatus status,
+) => switch (status) {
+  PrescriptionStatus.active => (
+    'Active',
+    AppColors.success,
+    Icons.check_circle_rounded,
+  ),
+  PrescriptionStatus.followUpDue => (
+    'Follow-up due',
+    AppColors.warning,
+    Icons.event_repeat_rounded,
+  ),
+  PrescriptionStatus.completed => (
+    'Completed',
+    AppColors.mutedText(context),
+    Icons.task_alt_rounded,
+  ),
+};
+
+/// The dashboard shadcn theme with a medical-teal primary, so primary
+/// buttons on the Prescriptions screen and its cards read as one accent.
+class PrescriptionShadcnScope extends StatelessWidget {
+  const PrescriptionShadcnScope({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      DashboardShadcnScope(primary: DashboardTokens.tealDeep, child: child);
+}
+
+/// Loading placeholder with the card's exact structure; render it inside a
+/// [Skeleton] so every block matches the loaded card (no layout shift).
+class PrescriptionCardSkeleton extends StatelessWidget {
+  const PrescriptionCardSkeleton({super.key});
+
+  static final _placeholder = Prescription(
+    id: 'skeleton',
+    patientName: 'Patient Name',
+    date: DateTime(2026),
+    patientAge: 30,
+    patientWeight: 60,
+    diagnosis: 'Diagnosis text',
+    medicines: const [
+      MedicineItem(
+        name: 'Medicine name',
+        strength: '500mg',
+        morning: true,
+        evening: true,
+        durationDays: 5,
+      ),
+      MedicineItem(
+        name: 'Medicine name',
+        strength: '10mg',
+        evening: true,
+        durationDays: 7,
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) => _PrescriptionCardContent(
+    prescription: _placeholder,
+    status: PrescriptionStatus.active,
+    doctorName: 'Doctor Name',
+    doctorSpecialty: 'Specialty',
+    digitallySigned: false,
+    generating: false,
+    selectionMode: false,
+    selected: false,
+    onOpen: () {},
+    onShare: () {},
+    onDownload: () {},
+    onRenew: () {},
+  );
+}
+
+/// 3-tier clinical card: patient & Rx meta → recessed medication panel →
+/// quick actions.
 class _PrescriptionCardContent extends StatelessWidget {
   const _PrescriptionCardContent({
     required this.prescription,
+    required this.status,
     required this.digitallySigned,
     required this.generating,
     required this.selectionMode,
@@ -426,12 +531,16 @@ class _PrescriptionCardContent extends StatelessWidget {
     required this.onOpen,
     required this.onShare,
     required this.onDownload,
+    this.onRenew,
     this.doctorName,
+    this.doctorSpecialty,
     this.onSelectionChanged,
   });
 
   final Prescription prescription;
+  final PrescriptionStatus status;
   final String? doctorName;
+  final String? doctorSpecialty;
   final bool digitallySigned;
   final bool generating;
   final bool selectionMode;
@@ -441,231 +550,209 @@ class _PrescriptionCardContent extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onDownload;
 
+  /// Null hides the Renew action (read-only trial grace access).
+  final VoidCallback? onRenew;
+
+  static const _maxMedicineLines = 3;
+
   @override
   Widget build(BuildContext context) {
-    final cleanDoctorName = doctorName?.trim();
-    final author = cleanDoctorName == null || cleanDoctorName.isEmpty
-        ? 'Doctor'
-        : cleanDoctorName.startsWith('Dr.')
-        ? cleanDoctorName
-        : 'Dr. $cleanDoctorName';
-    final medicineCount = prescription.medicines.isNotEmpty
-        ? prescription.medicines.length
-        : prescription.legacyMedications?.trim().isNotEmpty == true
-        ? 1
-        : 0;
-    final diagnosis = prescription.diagnosis?.trim();
-    final active = _isActive(prescription);
-    final followUp = _followUpLabel(prescription.followUpDate);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: AppColors.border(context)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow(context, alpha: 0.045),
-            blurRadius: 13,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          InkWell(
-            onTap: selectionMode
-                ? () => onSelectionChanged?.call(!selected)
-                : onOpen,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 13, 12, 11),
-              child: Column(
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (selectionMode) ...[
-                        Checkbox(
-                          value: selected,
-                          onChanged: onSelectionChanged,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        const SizedBox(width: 4),
-                      ] else ...[
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppColors.primary200.withValues(
-                                alpha: 0.55,
-                              ),
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.note_add_outlined,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
+    final (statusLabel, statusColor, statusIcon) = _statusStyle(
+      context,
+      status,
+    );
+    return PrescriptionShadcnScope(
+      child: AppPressScale(
+        builder: (onHighlight) => shadcn.Card(
+          padding: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(DashboardTokens.radius),
+          borderColor: selectionMode && selected
+              ? DashboardTokens.teal.withValues(alpha: 0.6)
+              : DashboardTokens.border(context),
+          boxShadow: DashboardTokens.shadow(context),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header + body are the tap target; the footer's buttons sit
+              // outside it so they stay independently tappable.
+              Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: selectionMode
+                      ? () => onSelectionChanged?.call(!selected)
+                      : onOpen,
+                  onHighlightChanged: onHighlight,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _header(context, statusLabel, statusColor, statusIcon),
+                        const SizedBox(height: 12),
+                        _medicationPanel(context),
+                        const SizedBox(height: 10),
+                        _doctorRow(context),
                       ],
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    prescription.patientName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: AppColors.onSurface(context),
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                                if (active) const _ActiveRxBadge(),
-                              ],
-                            ),
-                            const SizedBox(height: 3),
-                            Text.rich(
-                              TextSpan(
-                                children: [
-                                  const TextSpan(text: 'Diagnosis:  '),
-                                  TextSpan(
-                                    text: diagnosis == null || diagnosis.isEmpty
-                                        ? 'Not specified'
-                                        : '"$diagnosis"',
-                                    style: TextStyle(
-                                      color: AppColors.mutedText(context),
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: AppColors.subtleText(context),
-                                fontSize: 11.5,
-                              ),
-                            ),
-                            const SizedBox(height: 7),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 5,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.secondarySurface(context),
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Text(
-                                    '$medicineCount ${medicineCount == 1 ? 'Drug' : 'Drugs'} prescribed',
-                                    style: TextStyle(
-                                      color: AppColors.mutedText(context),
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                if (followUp != null)
-                                  Text(
-                                    '•  Follow-up: $followUp',
-                                    style: TextStyle(
-                                      color: AppColors.subtleText(context),
-                                      fontSize: 10.5,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 7),
-                      Text(
-                        DateFormat('d MMM yy').format(prescription.date),
-                        style: TextStyle(
-                          color: AppColors.mutedText(context),
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (!selectionMode) ...[
-                    const SizedBox(height: 12),
-                    _PrescriptionPdfRow(
-                      fileName: _pdfFileName(prescription),
-                      digitallySigned: digitallySigned,
-                      generating: generating,
-                      onOpen: onOpen,
-                      onShare: onShare,
-                      onDownload: onDownload,
                     ),
-                  ],
-                ],
+                  ),
+                ),
+              ),
+              if (!selectionMode) ...[
+                shadcn.Divider(color: DashboardTokens.border(context)),
+                _footer(context),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Tier 1: patient & Rx meta ─────────────────────────────────────────
+  Widget _header(
+    BuildContext context,
+    String statusLabel,
+    Color statusColor,
+    IconData statusIcon,
+  ) {
+    final meta = [
+      if (prescription.patientAge != null) '${prescription.patientAge} yrs',
+      if (prescription.patientWeight != null)
+        '${_trimNumber(prescription.patientWeight!)} kg',
+    ].join(' · ');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (selectionMode)
+          Checkbox(
+            value: selected,
+            onChanged: onSelectionChanged,
+            visualDensity: VisualDensity.compact,
+          )
+        else
+          shadcn.Avatar(
+            initials: shadcn.Avatar.getInitials(prescription.patientName),
+            size: 42,
+            backgroundColor: DashboardTokens.teal.withValues(alpha: 0.14),
+          ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                prescription.patientName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.onSurface(context),
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                meta.isEmpty ? 'Age & weight not recorded' : meta,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.subtleText(context),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            DashboardToneBadge(
+              label: statusLabel,
+              color: statusColor,
+              icon: statusIcon,
+            ),
+            const SizedBox(height: 5),
+            Text(
+              DateFormat('d MMM yyyy').format(prescription.date),
+              style: TextStyle(
+                color: AppColors.mutedText(context),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-          if (!selectionMode) ...[
-            Divider(height: 1, color: AppColors.border(context)),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 5, 7, 5),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'By $author',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.subtleText(context),
-                        fontSize: 10.5,
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: generating ? null : onShare,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.success,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      visualDensity: VisualDensity.compact,
-                      textStyle: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    icon: const Icon(Icons.share_outlined, size: 14),
-                    label: const Text('Share'),
-                  ),
-                  TextButton(
-                    onPressed: onOpen,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.primary600,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      visualDensity: VisualDensity.compact,
-                      textStyle: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    child: const Text('View Rx →'),
-                  ),
-                ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Tier 2: recessed medication & dosage panel ────────────────────────
+  Widget _medicationPanel(BuildContext context) {
+    final diagnosis = prescription.diagnosis?.trim();
+    final medicines = prescription.medicines;
+    final legacy = prescription.legacyMedications?.trim();
+    final followUp = _followUpText(prescription.followUpDate);
+    final hidden = medicines.length - _maxMedicineLines;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.secondarySurface(context).withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(DashboardTokens.innerRadius),
+        border: Border.all(
+          color: DashboardTokens.border(context).withValues(alpha: 0.6),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (diagnosis != null && diagnosis.isNotEmpty) ...[
+            _PanelLabel(
+              icon: Icons.medical_information_outlined,
+              label: 'Diagnosis',
+              value: diagnosis,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (medicines.isEmpty)
+            Text(
+              legacy == null || legacy.isEmpty
+                  ? 'No medicines recorded'
+                  : legacy,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.onSurface(context),
+                fontSize: 12.5,
+                height: 1.4,
               ),
+            )
+          else
+            for (final (i, item)
+                in medicines.take(_maxMedicineLines).indexed) ...[
+              if (i > 0) const SizedBox(height: 10),
+              _MedicineLine(item: item),
+            ],
+          if (hidden > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '+$hidden more ${hidden == 1 ? 'medicine' : 'medicines'}',
+              style: const TextStyle(
+                color: DashboardTokens.tealDeep,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (followUp != null) ...[
+            const SizedBox(height: 10),
+            _PanelLabel(
+              icon: Icons.event_repeat_rounded,
+              label: 'Follow-up',
+              value: followUp,
             ),
           ],
         ],
@@ -673,163 +760,282 @@ class _PrescriptionCardContent extends StatelessWidget {
     );
   }
 
-  static bool _isActive(Prescription value) {
-    final today = DateUtils.dateOnly(DateTime.now());
-    final prescriptionDate = DateUtils.dateOnly(value.date);
-    final followUpDate = value.followUpDate == null
-        ? null
-        : DateUtils.dateOnly(value.followUpDate!);
-    return !prescriptionDate.isBefore(today) ||
-        (followUpDate != null && !followUpDate.isBefore(today));
+  Widget _doctorRow(BuildContext context) {
+    final clean = doctorName?.trim();
+    final author = clean == null || clean.isEmpty
+        ? 'Doctor'
+        : clean.startsWith('Dr.')
+        ? clean
+        : 'Dr. $clean';
+    final specialty = doctorSpecialty?.trim();
+    return Row(
+      children: [
+        Icon(
+          digitallySigned ? Icons.verified_rounded : Icons.person_outline,
+          size: 14,
+          color: digitallySigned
+              ? DashboardTokens.tealDeep
+              : AppColors.subtleText(context),
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            author,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: AppColors.mutedText(context),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        if (specialty != null && specialty.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          Flexible(
+            child: _Tag(text: specialty, color: DashboardTokens.tealDeep),
+          ),
+        ],
+      ],
+    );
   }
 
-  static String? _followUpLabel(DateTime? value) {
+  // ── Tier 3: quick clinical actions ────────────────────────────────────
+  Widget _footer(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(8, 8, 10, 10),
+    child: Row(
+      children: [
+        Tooltip(
+          message: 'Share prescription PDF',
+          child: shadcn.IconButton.ghost(
+            onPressed: generating ? null : onShare,
+            density: shadcn.ButtonDensity.icon,
+            icon: const Icon(Icons.share_outlined, size: 18),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Tooltip(
+          message: 'Download prescription PDF',
+          child: shadcn.IconButton.outline(
+            onPressed: generating ? null : onDownload,
+            density: shadcn.ButtonDensity.icon,
+            icon: Icon(
+              generating ? Icons.hourglass_top_rounded : Icons.download_rounded,
+              size: 18,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          // Scales down rather than overflowing on narrow phones or with
+          // large accessibility text.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onRenew != null) ...[
+                  shadcn.SecondaryButton(
+                    onPressed: onRenew,
+                    size: shadcn.ButtonSize.small,
+                    leading: const Icon(Icons.autorenew_rounded, size: 15),
+                    child: const Text('Renew'),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                shadcn.PrimaryButton(
+                  onPressed: onOpen,
+                  size: shadcn.ButtonSize.small,
+                  trailing: const Icon(Icons.arrow_forward_rounded, size: 15),
+                  child: const Text('View Details'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  static String _trimNumber(double value) =>
+      value == value.roundToDouble() ? '${value.round()}' : '$value';
+
+  static String? _followUpText(DateTime? value) {
     if (value == null) return null;
     final days = DateUtils.dateOnly(
       value,
     ).difference(DateUtils.dateOnly(DateTime.now())).inDays;
-    if (days < 0) return null;
-    if (days == 0) return 'Today';
-    return '$days ${days == 1 ? 'Day' : 'Days'}';
-  }
-
-  static String _pdfFileName(Prescription value) {
-    final patient = value.patientName
-        .trim()
-        .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
-    final date = DateFormat('dMMM').format(value.date);
-    return 'Prescription_${date}_${patient.isEmpty ? 'Patient' : patient}.pdf';
+    final date = DateFormat('d MMM').format(value);
+    if (days == 0) return 'Today ($date)';
+    if (days == 1) return 'Tomorrow ($date)';
+    if (days > 1) return 'In $days days ($date)';
+    if (days == -1) return 'Was yesterday ($date)';
+    return 'Was ${-days} days ago ($date)';
   }
 }
 
-class _ActiveRxBadge extends StatelessWidget {
-  const _ActiveRxBadge();
+/// One structured medicine: "Name · strength" + regimen chips.
+class _MedicineLine extends StatelessWidget {
+  const _MedicineLine({required this.item});
+
+  final MedicineItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final strength = item.strength.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.medication_rounded,
+              size: 15,
+              color: DashboardTokens.tealDeep,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  text: item.name.trim().isEmpty ? 'Medicine' : item.name,
+                  style: TextStyle(
+                    color: AppColors.onSurface(context),
+                    fontWeight: FontWeight.w700,
+                  ),
+                  children: [
+                    if (strength.isNotEmpty)
+                      TextSpan(
+                        text: '  ·  $strength',
+                        style: TextStyle(
+                          color: AppColors.mutedText(context),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                  ],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.only(left: 21),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 5,
+            children: [
+              _Tag(
+                icon: Icons.schedule_rounded,
+                text: item.schedule,
+                color: AppColors.primary600,
+              ),
+              _Tag(
+                icon: Icons.restaurant_rounded,
+                text: item.food == MedicineFood.before
+                    ? 'Before food'
+                    : 'After food',
+                color: DashboardTokens.tealDeep,
+              ),
+              if (item.durationDays > 0)
+                _Tag(
+                  icon: Icons.timelapse_rounded,
+                  text:
+                      '${item.durationDays} ${item.durationDays == 1 ? 'day' : 'days'}',
+                  color: AppColors.mutedText(context),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Small tinted metadata chip (dosage, food timing, duration, specialty).
+class _Tag extends StatelessWidget {
+  const _Tag({required this.text, required this.color, this.icon});
+
+  final String text;
+  final Color color;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
     decoration: BoxDecoration(
-      color: AppColors.success.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(7),
-      border: Border.all(color: AppColors.success.withValues(alpha: 0.25)),
-    ),
-    child: const Text(
-      'Active Rx',
-      style: TextStyle(
-        color: AppColors.success,
-        fontSize: 9,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
-}
-
-class _PrescriptionPdfRow extends StatelessWidget {
-  const _PrescriptionPdfRow({
-    required this.fileName,
-    required this.digitallySigned,
-    required this.generating,
-    required this.onOpen,
-    required this.onShare,
-    required this.onDownload,
-  });
-
-  final String fileName;
-  final bool digitallySigned;
-  final bool generating;
-  final VoidCallback onOpen;
-  final VoidCallback onShare;
-  final VoidCallback onDownload;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(10, 8, 5, 8),
-    decoration: BoxDecoration(
-      color: AppColors.secondarySurface(context),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: AppColors.border(context)),
+      color: AppColors.isDark(context)
+          ? color.withValues(alpha: 0.16)
+          : Color.alphaBlend(color.withValues(alpha: 0.08), AppColors.card),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: color.withValues(alpha: 0.2)),
     ),
     child: Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: AppColors.pink.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
+        if (icon != null) ...[
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 4),
+        ],
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          child: const Icon(
-            Icons.description_rounded,
-            size: 15,
-            color: AppColors.pink,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                fileName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.onSurface(context),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                digitallySigned ? 'Digitally signed' : 'Prescription PDF',
-                style: TextStyle(
-                  color: AppColors.subtleText(context),
-                  fontSize: 9.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-        _CardIconAction(
-          tooltip: 'View prescription',
-          icon: Icons.visibility_outlined,
-          onPressed: onOpen,
-        ),
-        _CardIconAction(
-          tooltip: 'Download prescription PDF',
-          icon: Icons.download_rounded,
-          loading: generating,
-          onPressed: generating ? null : onDownload,
         ),
       ],
     ),
   );
 }
 
-class _CardIconAction extends StatelessWidget {
-  const _CardIconAction({
-    required this.tooltip,
+/// "Diagnosis  Acute bronchitis" style labelled line inside the panel.
+class _PanelLabel extends StatelessWidget {
+  const _PanelLabel({
     required this.icon,
-    required this.onPressed,
-    this.loading = false,
+    required this.label,
+    required this.value,
   });
 
-  final String tooltip;
   final IconData icon;
-  final VoidCallback? onPressed;
-  final bool loading;
+  final String label;
+  final String value;
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    onPressed: onPressed,
-    tooltip: tooltip,
-    visualDensity: VisualDensity.compact,
-    icon: loading
-        ? const SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(strokeWidth: 1.8),
-          )
-        : Icon(icon, size: 17, color: AppColors.primary600),
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 14, color: AppColors.subtleText(context)),
+      const SizedBox(width: 6),
+      Text(
+        label,
+        style: TextStyle(
+          color: AppColors.subtleText(context),
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: AppColors.onSurface(context),
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    ],
   );
 }

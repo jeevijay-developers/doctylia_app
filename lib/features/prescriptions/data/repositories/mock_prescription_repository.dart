@@ -3,6 +3,7 @@ import 'package:doctylia_app/core/pagination/page_request.dart';
 import 'package:doctylia_app/core/pagination/page_result.dart';
 import 'package:doctylia_app/core/result/result.dart';
 import 'package:doctylia_app/features/prescriptions/domain/entities/prescription.dart';
+import 'package:doctylia_app/features/prescriptions/domain/entities/prescription_status.dart';
 import 'package:doctylia_app/features/prescriptions/domain/repositories/prescription_repository.dart';
 
 final class MockPrescriptionRepository implements PrescriptionRepository {
@@ -85,6 +86,24 @@ final class MockPrescriptionRepository implements PrescriptionRepository {
           ),
         ],
       );
+
+  @override
+  Future<Result<PrescriptionSummary>> summary({required DateTime now}) =>
+      RepositoryGuard.run(() {
+        final weekStart = startOfWeek(now);
+        final statuses = _items.map(
+          (item) => prescriptionStatusOf(item, now: now),
+        );
+        return PrescriptionSummary(
+          active: statuses.where((s) => s == PrescriptionStatus.active).length,
+          followUpsDue: statuses
+              .where((s) => s == PrescriptionStatus.followUpDue)
+              .length,
+          issuedThisWeek: _items
+              .where((item) => !item.date.isBefore(weekStart))
+              .length,
+        );
+      });
 
   @override
   Future<Result<PrescriptionSlipDetails>> getSlipDetails(

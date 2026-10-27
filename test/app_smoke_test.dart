@@ -1,4 +1,5 @@
 import 'package:doctylia_app/features/dashboard/presentation/screens/dashboard_shell.dart';
+import 'package:doctylia_app/features/dashboard/presentation/screens/more_screen.dart';
 import 'package:doctylia_app/app/app.dart';
 import 'package:doctylia_app/app/providers/repository_overrides.dart';
 import 'package:doctylia_app/core/data/app_data_source.dart';
@@ -20,6 +21,41 @@ import 'support/fake_preferences_store.dart';
 import 'support/counting_dashboard_repository.dart';
 
 void main() {
+  testWidgets('signs up in-app with name + phone OTP', (tester) async {
+    await tester.pumpWidget(
+      _testApp(FakePreferencesStore({'has_seen_onboarding': true})),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Welcome Back'), findsOneWidget);
+
+    // An unregistered number offers signup and carries the number over.
+    await tester.enterText(find.byType(TextField).first, '9123456789');
+    await _tapVisible(tester, find.text('Send OTP'));
+    await tester.pumpAndSettle();
+    await _tapVisible(tester, find.text('Sign up instead'));
+    await tester.pumpAndSettle();
+    expect(find.text('Start Your Free Trial'), findsOneWidget);
+    expect(find.text('7 days free'), findsOneWidget);
+    expect(find.text('9123456789'), findsOneWidget);
+
+    // Full name is required, like the web form.
+    await _tapVisible(tester, find.text('Send OTP'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter your full name'), findsOneWidget);
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'Dr. Meera Shah');
+    await tester.enterText(fields.at(1), '9876543210');
+    await _tapVisible(tester, find.text('Send OTP'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter Code'), findsOneWidget);
+    expect(find.text('Verify & Create Account'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '123456');
+    await tester.pumpAndSettle();
+    expect(find.text('TOTAL PRACTICE REVENUE'), findsOneWidget);
+  });
+
   testWidgets('onboards, rejects bad login, authenticates, and logs out', (
     tester,
   ) async {
@@ -46,9 +82,10 @@ void main() {
     await _tapVisible(tester, find.text('Send OTP'));
     await tester.pumpAndSettle();
     expect(
-      find.text('No Doctylia account is linked to this mobile number.'),
+      find.text('No account found with this phone number.'),
       findsOneWidget,
     );
+    expect(find.text('Sign up instead'), findsOneWidget);
 
     await tester.enterText(phoneField, '9876543210');
     await _tapVisible(tester, find.text('Send OTP'));
@@ -74,9 +111,7 @@ void main() {
 
     await tester.tap(find.text('More'));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, -600));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Log out'));
+    await _tapMoreTile(tester, 'Log out');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Log Out'));
     await tester.pumpAndSettle();
@@ -320,12 +355,19 @@ void main() {
     tester.view.physicalSize = const Size(375, 812);
     await tester.pumpAndSettle();
 
-    expect(find.text('ALL MODULES & SERVICES'), findsOneWidget);
-    expect(find.text('9 practice tools connected & active'), findsOneWidget);
-    expect(find.text('Sync active'), findsOneWidget);
+    expect(find.text('Practice Hub'), findsOneWidget);
+    expect(find.text('New Prescription'), findsOneWidget);
+    expect(find.text('CLINICAL PRACTICE'), findsOneWidget);
     expect(find.text('Prescriptions'), findsOneWidget);
-    expect(find.text('Manage digital Rx templates & history'), findsOneWidget);
+    expect(find.text('Digital Rx, renewals & follow-ups'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Log out'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Live'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('system back from a More module returns to More', (tester) async {
@@ -340,17 +382,19 @@ void main() {
     final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
-    expect(find.text('ALL MODULES & SERVICES'), findsOneWidget);
+    expect(find.text('Practice Hub'), findsOneWidget);
 
-    await tester.tap(find.text('My Website'));
+    await tester.pumpAndSettle();
+    await _tapMoreTile(tester, 'My Website');
     await tester.pumpAndSettle();
     expect(find.text('Your public website'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    expect(find.text('ALL MODULES & SERVICES'), findsOneWidget);
+    // Back on More, at the same scroll position.
     expect(find.text('My Website'), findsOneWidget);
+    expect(find.byType(MoreScreen), findsOneWidget);
   });
 
   testWidgets('system back from More returns to Home', (tester) async {
@@ -365,7 +409,7 @@ void main() {
     final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
-    expect(find.text('ALL MODULES & SERVICES'), findsOneWidget);
+    expect(find.text('Practice Hub'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -491,19 +535,22 @@ void main() {
 
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Prescriptions'));
+    await _tapMoreTile(tester, 'Prescriptions');
     await tester.pumpAndSettle();
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(375, 812);
     await tester.pumpAndSettle();
     expect(find.text('Search patient or diagnosis'), findsOneWidget);
-    expect(find.text('1 total clinical record'), findsOneWidget);
-    expect(find.text('Active Rx (1)'), findsOneWidget);
-    expect(find.text('1 Drug prescribed'), findsOneWidget);
-    expect(find.text('View Rx →'), findsOneWidget);
+    expect(find.text('New Prescription'), findsOneWidget);
+    expect(find.text('1 record'), findsOneWidget);
+    expect(find.text('Active / Ongoing'), findsOneWidget);
+    expect(find.text('View Details'), findsOneWidget);
+    expect(find.text('Renew'), findsOneWidget);
+    expect(find.byTooltip('Download prescription PDF'), findsOneWidget);
     await tester.tap(find.text('Ananya Sharma').first);
     await tester.pumpAndSettle();
-    expect(find.text('Diagnosis'), findsOneWidget);
+    // "Diagnosis" labels both the card panel and the details sheet.
+    expect(find.text('Diagnosis'), findsWidgets);
     expect(find.text('Medicines'), findsOneWidget);
     expect(find.text('Notes'), findsOneWidget);
   });
@@ -522,14 +569,14 @@ void main() {
 
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Billing'));
+    await _tapMoreTile(tester, 'Billing');
     await tester.pumpAndSettle();
     expect(find.text('Transactions'), findsWidgets);
     expect(find.text('Invoices'), findsWidgets);
 
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Settings'));
+    await _tapMoreTile(tester, 'Settings');
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(375, 812);
     await tester.pumpAndSettle();
@@ -538,20 +585,29 @@ void main() {
     expect(find.text('Account'), findsOneWidget);
     expect(find.text('Dr. Doctor'), findsWidgets);
     expect(find.text('Your Details'), findsOneWidget);
-    expect(find.text('Editable'), findsOneWidget);
+    // Editors are collapsed rows; open "Your Details" to edit.
+    await tester.tap(find.text('Your Details'));
+    await tester.pumpAndSettle();
     final fullName = find.widgetWithText(TextFormField, 'Full Name');
     expect(fullName, findsOneWidget);
     expect(find.text('Dr. '), findsOneWidget);
     await tester.enterText(fullName, 'Updated Doctor');
-    await tester.drag(find.byType(ListView).last, const Offset(0, -500));
+    await tester.ensureVisible(find.text('Clinic Details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Clinic Details'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('GST Registered'));
     await tester.pumpAndSettle();
     expect(find.text('Map Pin'), findsOneWidget);
     expect(find.text('GST Registered'), findsOneWidget);
-    await tester.drag(find.byType(ListView).last, const Offset(0, -500));
+    await tester.ensureVisible(find.text('Bank / UPI Setup'));
     await tester.pumpAndSettle();
-    expect(find.text('Bank / UPI Setup'), findsOneWidget);
-    expect(find.text('Automatic daily payouts for practice'), findsOneWidget);
     expect(find.text('TEST MODE'), findsOneWidget);
+    await tester.tap(find.text('Bank / UPI Setup'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save Payout Details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Automatic daily payouts for practice'), findsOneWidget);
     expect(find.text('Bank Account'), findsOneWidget);
     expect(find.text('UPI ID'), findsWidgets);
     expect(find.text('Save Payout Details'), findsOneWidget);
@@ -715,9 +771,12 @@ void main() {
     final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Prescriptions'));
+    await _tapMoreTile(tester, 'Prescriptions');
     await tester.pumpAndSettle();
     expect(find.byTooltip('Download prescription PDF'), findsOneWidget);
+    // The action footer sits below the fold on the 800×600 test surface.
+    await tester.ensureVisible(find.byIcon(Icons.download_rounded));
+    await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.download_rounded));
     await tester.pumpAndSettle();
 
@@ -745,8 +804,7 @@ void main() {
     final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Reviews'));
-    await tester.tap(find.text('Reviews'));
+    await _tapMoreTile(tester, 'Reviews');
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Ananya Sharma').first);
@@ -796,11 +854,9 @@ void main() {
     expect(find.text('Search staff or username'), findsOneWidget);
     expect(find.text('Add Staff'), findsOneWidget);
     await openModule('Contact Support');
-    expect(
-      find.text('Your support requests and Doctylia’s replies.'),
-      findsOneWidget,
-    );
-    expect(find.text('New Request'), findsOneWidget);
+    expect(find.text('Help & Support'), findsOneWidget);
+    expect(find.text('Raise a ticket'), findsOneWidget);
+    expect(find.text('Recent Support Tickets'), findsOneWidget);
   });
 
   testWidgets('blog publish and unpublish update the post status', (
@@ -825,39 +881,54 @@ void main() {
     await tester.tap(find.text('Blog'));
     await tester.pumpAndSettle();
 
-    final toggle = find.byWidgetPredicate(
-      (widget) =>
-          widget is Text &&
-          (widget.data == 'Publish' || widget.data == 'Unpublish'),
-    );
-    final before = (tester.widget(toggle.first) as Text).data;
-    await tester.tap(toggle.first);
+    // Seed post blog-0 is the newest draft. Each post renders its toggle
+    // once (spotlight or list card), keyed by id.
+    final toggle = find.byKey(const ValueKey('blog-toggle-blog-0'));
+    final feed = find
+        .descendant(
+          of: find.byType(CustomScrollView).last,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(toggle, 200, scrollable: feed);
+    await tester.pumpAndSettle();
+    String toggleLabel() =>
+        (tester.widget(
+                  find.descendant(
+                    of: toggle,
+                    matching: find.byWidgetPredicate(
+                      (widget) =>
+                          widget is Text &&
+                          (widget.data == 'Publish' ||
+                              widget.data == 'Unpublish'),
+                    ),
+                  ),
+                )
+                as Text)
+            .data!;
+    expect(toggleLabel(), 'Publish');
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
     await tester.pumpAndSettle();
 
-    final after = (tester.widget(toggle.first) as Text).data;
-    expect(after, isNot(before));
-    expect(
-      find.text(before == 'Publish' ? 'Post published.' : 'Post unpublished.'),
-      findsOneWidget,
+    expect(find.text('Post published.'), findsOneWidget);
+    // Now the newest live article: it moves into the spotlight (top).
+    await tester.drag(
+      find.byType(CustomScrollView).last,
+      const Offset(0, 2000),
     );
+    await tester.pumpAndSettle();
+    expect(toggleLabel(), 'Unpublish');
 
-    final firstTitle = find.descendant(
-      of: find.byType(ListView).last,
-      matching: find.byWidgetPredicate(
-        (widget) =>
-            widget is Text &&
-            widget.style?.fontWeight == FontWeight.w700 &&
-            widget.data != 'Published' &&
-            widget.data != 'Draft',
-      ),
-    );
-    final deletedTitle = (tester.widget(firstTitle.first) as Text).data!;
+    await tester.ensureVisible(find.byTooltip('Delete post').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Delete post').first);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
 
-    expect(find.text(deletedTitle), findsNothing);
+    expect(toggle, findsNothing);
   });
 
   testWidgets('reported dark-mode labels render with readable colours', (
@@ -928,7 +999,7 @@ void main() {
     final bar = find.byKey(DashboardShell.bottomNavKey);
     await tester.tap(find.descendant(of: bar, matching: find.text('More')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('My Website'));
+    await _tapMoreTile(tester, 'My Website');
     await tester.pumpAndSettle();
 
     Future<void> editAndSave({
@@ -1100,4 +1171,15 @@ Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
+}
+
+/// The More list builds lazily: scroll to a module tile, then open it.
+Future<void> _tapMoreTile(WidgetTester tester, String title) async {
+  await tester.scrollUntilVisible(
+    find.text(title),
+    200,
+    scrollable: find.byType(Scrollable).last,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(title));
 }

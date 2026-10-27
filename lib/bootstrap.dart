@@ -5,6 +5,8 @@ import 'package:doctylia_app/app/app_flavor.dart';
 import 'package:doctylia_app/app/providers/repository_overrides.dart';
 import 'package:doctylia_app/core/config/supabase_config.dart';
 import 'package:doctylia_app/core/logging/app_logger.dart';
+import 'package:doctylia_app/core/platform/shared_file_cache.dart';
+import 'package:doctylia_app/core/security/turnstile.dart';
 import 'package:doctylia_app/features/auth/data/repositories/supabase_auth_repository.dart';
 import 'package:doctylia_app/features/auth/presentation/providers/auth_providers.dart';
 import 'package:doctylia_app/features/appointments/data/repositories/supabase_appointment_repository.dart';
@@ -20,6 +22,8 @@ import 'package:doctylia_app/features/notifications/presentation/providers/notif
 import 'package:doctylia_app/features/inquiries/data/repositories/supabase_inquiry_repository.dart';
 import 'package:doctylia_app/features/inquiries/presentation/providers/inquiry_providers.dart';
 import 'package:doctylia_app/features/patients/data/repositories/supabase_patient_repository.dart';
+import 'package:doctylia_app/features/practice_setup/data/repositories/supabase_practice_setup_repository.dart';
+import 'package:doctylia_app/features/practice_setup/presentation/providers/practice_setup_providers.dart';
 import 'package:doctylia_app/features/patients/presentation/providers/patient_providers.dart';
 import 'package:doctylia_app/features/prescriptions/data/repositories/supabase_prescription_repository.dart';
 import 'package:doctylia_app/features/prescriptions/presentation/providers/prescription_providers.dart';
@@ -33,6 +37,8 @@ import 'package:doctylia_app/features/support/data/repositories/supabase_support
 import 'package:doctylia_app/features/support/presentation/providers/support_providers.dart';
 import 'package:doctylia_app/features/website/data/repositories/supabase_website_repository.dart';
 import 'package:doctylia_app/features/website/presentation/providers/website_providers.dart';
+import 'package:doctylia_app/shared/entitlements/feature_access_provider.dart';
+import 'package:doctylia_app/shared/entitlements/feature_access_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -56,6 +62,8 @@ Future<void> bootstrap({AppFlavor flavor = AppFlavor.mock}) async {
         url: SupabaseConfig.url,
         publishableKey: SupabaseConfig.publishableKey,
       );
+      // Exports from earlier sessions may hold patient data.
+      unawaited(SharedFileCache.purge());
 
       runApp(
         ProviderScope(
@@ -66,6 +74,9 @@ Future<void> bootstrap({AppFlavor flavor = AppFlavor.mock}) async {
           retry: (_, _) => null,
           overrides: [
             appDataSourceProvider.overrideWithValue(appDataSourceFor(flavor)),
+            // Supabase Auth enforces CAPTCHA: OTP, password and reset requests
+            // need a Cloudflare Turnstile token, as on the web.
+            turnstileSiteKeyProvider.overrideWithValue(TurnstileConfig.siteKey),
             authRepositoryProvider.overrideWithValue(
               SupabaseAuthRepository(Supabase.instance.client),
             ),
@@ -90,6 +101,9 @@ Future<void> bootstrap({AppFlavor flavor = AppFlavor.mock}) async {
             patientRepositoryProvider.overrideWithValue(
               SupabasePatientRepository(Supabase.instance.client),
             ),
+            practiceSetupRepositoryProvider.overrideWithValue(
+              SupabasePracticeSetupRepository(Supabase.instance.client),
+            ),
             prescriptionRepositoryProvider.overrideWithValue(
               SupabasePrescriptionRepository(Supabase.instance.client),
             ),
@@ -107,6 +121,9 @@ Future<void> bootstrap({AppFlavor flavor = AppFlavor.mock}) async {
             ),
             websiteRepositoryProvider.overrideWithValue(
               SupabaseWebsiteRepository(Supabase.instance.client),
+            ),
+            featureAccessRepositoryProvider.overrideWithValue(
+              SupabaseFeatureAccessRepository(Supabase.instance.client),
             ),
           ],
           child: const DoctyliaApp(),

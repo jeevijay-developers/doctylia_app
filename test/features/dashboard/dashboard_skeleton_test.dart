@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:doctylia_app/app/router/app_router.dart';
 import 'package:doctylia_app/app/app.dart';
 import 'package:doctylia_app/app/providers/repository_overrides.dart';
 import 'package:doctylia_app/core/data/app_data_source.dart';
@@ -102,6 +103,7 @@ void main() {
             }),
           ),
           dashboardRepositoryProvider.overrideWithValue(repository),
+          splashMinimumElapsedProvider.overrideWith((ref) async {}),
         ],
         child: const DoctyliaApp(),
       ),

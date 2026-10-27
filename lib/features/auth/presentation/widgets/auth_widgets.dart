@@ -1,6 +1,7 @@
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// A dialling country offered on the phone login screen.
 class AuthCountry {
@@ -159,15 +160,16 @@ class AuthHeroCard extends StatelessWidget {
     required this.badgeLabel,
     required this.badgeIcon,
     this.imagePath = 'assets/images/login_screen_img.png',
+    this.size = 164,
   });
 
   final String badgeLabel;
   final IconData badgeIcon;
   final String imagePath;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    const size = 164.0;
     return Center(
       child: SizedBox(
         width: size + 20,
@@ -181,7 +183,7 @@ class AuthHeroCard extends StatelessWidget {
               padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
                 color: AppColors.surface(context),
-                borderRadius: BorderRadius.circular(32),
+                borderRadius: BorderRadius.circular(size * 0.2),
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.shadow(context, alpha: 0.06),
@@ -484,4 +486,177 @@ class AuthInlineError extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Country prefix (flag, dial code, chevron) + national number input.
+class AuthPhoneField extends StatelessWidget {
+  const AuthPhoneField({
+    super.key,
+    required this.controller,
+    required this.country,
+    required this.onPickCountry,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final AuthCountry country;
+  final VoidCallback onPickCountry;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      borderSide: BorderSide.none,
+    );
+    return FormField<String>(
+      validator: (_) => country.validate(controller.text),
+      builder: (field) {
+        final hasError = field.hasError;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 58,
+              decoration: BoxDecoration(
+                color: AppColors.surface(context),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(
+                  color: hasError
+                      ? AppColors.destructive
+                      : AppColors.border(context).withValues(alpha: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: onPickCountry,
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(AppRadius.lg),
+                    ),
+                    child: Semantics(
+                      button: true,
+                      label: 'Country code ${country.dialCode}, change',
+                      excludeSemantics: true,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              country.flag,
+                              style: const TextStyle(fontSize: 22),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              country.dialCode,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSurface(context),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 20,
+                              color: AppColors.mutedText(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 1.5,
+                    height: 26,
+                    color: AppColors.primary200,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.phone,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [
+                        AutofillHints.telephoneNumberNational,
+                      ],
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(country.maxDigits),
+                      ],
+                      onChanged: (value) {
+                        field.didChange(value);
+                        if (hasError) field.validate();
+                      },
+                      onSubmitted: (_) => onSubmitted(),
+                      style: TextStyle(
+                        fontSize: 18,
+                        letterSpacing: 0.5,
+                        color: AppColors.onSurface(context),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: '98765 43210',
+                        hintStyle: TextStyle(
+                          fontSize: 18,
+                          color: AppColors.subtleText(context),
+                        ),
+                        filled: false,
+                        border: border,
+                        enabledBorder: border,
+                        focusedBorder: border,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (hasError)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: AppSpacing.sm),
+                child: Text(
+                  field.errorText!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.destructive,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Bottom sheet listing [AuthCountry.all]; returns the pick, or null.
+Future<AuthCountry?> showAuthCountryPicker(
+  BuildContext context, {
+  required AuthCountry selected,
+}) {
+  return showModalBottomSheet<AuthCountry>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          for (final country in AuthCountry.all)
+            ListTile(
+              leading: Text(country.flag, style: const TextStyle(fontSize: 24)),
+              title: Text(country.name),
+              trailing: Text(
+                country.dialCode,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              selected: country == selected,
+              onTap: () => Navigator.of(context).pop(country),
+            ),
+        ],
+      ),
+    ),
+  );
 }

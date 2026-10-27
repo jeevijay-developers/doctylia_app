@@ -52,6 +52,7 @@ final class MockReviewRepository implements ReviewRepository {
           : _items.fold<int>(0, (sum, row) => sum + row.rating) / _items.length,
       verified: _items.where((row) => row.isVerified).length,
       pinned: _items.where((row) => row.isPinned).length,
+      starCounts: ReviewStats.countStars(_items.map((row) => row.rating)),
     ),
   );
   @override

@@ -1,3 +1,4 @@
+import 'package:doctylia_app/app/router/route_names.dart';
 import 'package:doctylia_app/core/errors/app_failure.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
@@ -12,6 +13,7 @@ import 'package:doctylia_app/shared/entitlements/feature_access.dart';
 import 'package:doctylia_app/shared/entitlements/feature_gate.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 InputDecoration _fieldDecoration(String label, {String? helperText}) =>
@@ -159,6 +161,24 @@ class _LockedStaffView extends StatelessWidget {
               'Upgrade to add clinic staff and control their permissions.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.mutedText(context)),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                ),
+                // Settings → Subscription: plans and Razorpay checkout.
+                onPressed: () =>
+                    context.push('${RoutePaths.settings}?tab=subscription'),
+                icon: const Icon(Icons.workspace_premium_rounded, size: 20),
+                label: const Text('Upgrade Plan'),
+              ),
             ),
           ],
         ),

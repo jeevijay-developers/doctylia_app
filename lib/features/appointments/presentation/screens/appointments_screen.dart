@@ -5,6 +5,7 @@ import 'package:doctylia_app/core/errors/app_failure.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/core/widgets/app_error_view.dart';
+import 'package:doctylia_app/core/widgets/app_motion.dart';
 import 'package:doctylia_app/core/widgets/paged_list_footer.dart';
 import 'package:doctylia_app/features/appointments/domain/entities/appointment.dart';
 import 'package:doctylia_app/features/appointments/presentation/providers/appointment_providers.dart';
@@ -52,6 +53,10 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
   bool _deleting = false;
   final Set<String> _selectedIds = {};
 
+  /// Appointment ids whose card entrance already played for the current
+  /// results; reset whenever a new query loads (filter, date, search).
+  final Set<String> _animatedIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +96,8 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appointmentsProvider);
+    // A new query is loading: its results should cascade in again.
+    if (state.isLoading && !state.isRefreshing) _animatedIds.clear();
     final summary = ref.watch(appointmentSummaryProvider);
     final writeDisabled =
         ref.watch(trialStatusProvider).accessLevel == TrialAccessLevel.grace;
@@ -159,15 +166,7 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
                                 .read(appointmentsProvider.notifier)
                                 .loadMore(),
                           )
-                        : AppointmentCard(
-                            appointment: page.items[index],
-                            selectionMode: _selectionMode,
-                            selected: _selectedIds.contains(
-                              page.items[index].id,
-                            ),
-                            onSelected: () =>
-                                _toggleSelected(page.items[index].id),
-                          ),
+                        : _listItem(page.items[index], index),
                   ),
                 ),
               ],
@@ -180,149 +179,175 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
         if (!didPop) context.go(RoutePaths.dashboard);
       },
       child: DashboardShadcnScope(
-        child: Scaffold(
-          // Hidden on the empty state, which has its own Book CTA.
-          floatingActionButton:
-              _selectionMode || (state.value?.items.isEmpty ?? false)
-              ? null
-              : FloatingActionButton.extended(
-                  elevation: 2,
-                  highlightElevation: 4,
-                  backgroundColor: AppColors.primary600,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(DashboardTokens.radius),
-                  ),
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text(
-                    'Book',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-          body: Column(
-            children: [
-              // ── Pinned control strip: search + date picker ────────────
-              Container(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                ),
-                decoration: BoxDecoration(
-                  color: surface,
-                  border: Border(
-                    bottom: BorderSide(color: DashboardTokens.border(context)),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _SearchField(
-                        enabled: !_selectionMode,
-                        onChanged: _search,
+        child: AppMotion(
+          enabled: true,
+          child: Scaffold(
+            // Hidden on the empty state, which has its own Book CTA.
+            floatingActionButton:
+                _selectionMode || (state.value?.items.isEmpty ?? false)
+                ? null
+                : FloatingActionButton.extended(
+                    elevation: 2,
+                    highlightElevation: 4,
+                    backgroundColor: AppColors.primary600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        DashboardTokens.radius,
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.xs),
-                    _DateFilterButton(
-                      isActive: _dateRange != null,
-                      onPressed: _selectionMode ? null : _pickDateRange,
+                    onPressed: onAdd,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text(
+                      'Book',
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () =>
-                      ref.read(appointmentsProvider.notifier).refresh(),
-                  child: CustomScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: _WeekStrip(
-                          selected: _dateRange?.start,
-                          label: _dateRange == null
-                              ? 'All dates'
-                              : _dateRangeLabel(_dateRange!),
+                  ),
+            body: Column(
+              children: [
+                // ── Pinned control strip: search + date picker ────────────
+                Container(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: surface,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: DashboardTokens.border(context),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _SearchField(
                           enabled: !_selectionMode,
-                          onSelectDay: _selectDay,
-                          onSelectAll: _clearDates,
+                          onChanged: _search,
                         ),
                       ),
-                      SliverToBoxAdapter(
-                        child: _AppointmentSummaryStrip(summary: summary),
+                      const SizedBox(width: AppSpacing.xs),
+                      _DateFilterButton(
+                        isActive: _dateRange != null,
+                        onPressed: _selectionMode ? null : _pickDateRange,
                       ),
-                      SliverPersistentHeader(
-                        pinned: true,
-                        delegate: _PinnedTabsDelegate(
-                          background: surface,
-                          border: DashboardTokens.border(context),
-                          child: _StatusTabs(
-                            selected: _status,
-                            enabled: !_selectionMode,
-                            onChanged: _selectStatus,
-                          ),
-                        ),
-                      ),
-                      if (writeDisabled)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppSpacing.md,
-                              0,
-                              AppSpacing.md,
-                              AppSpacing.xs,
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.all(AppSpacing.sm),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppColors.warning.withValues(alpha: 0.13),
-                                    AppColors.warning.withValues(alpha: 0.04),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(
-                                  DashboardTokens.innerRadius,
-                                ),
-                                border: Border.all(
-                                  color: AppColors.warning.withValues(
-                                    alpha: 0.3,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.lock_clock_rounded,
-                                    size: 16,
-                                    color: AppColors.warning,
-                                  ),
-                                  const SizedBox(width: AppSpacing.xs),
-                                  Expanded(
-                                    child: Text(
-                                      'Trial grace access is read-only. Upgrade to edit.',
-                                      style: TextStyle(
-                                        color: AppColors.onSurface(context),
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ...content,
                     ],
                   ),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () =>
+                        ref.read(appointmentsProvider.notifier).refresh(),
+                    child: CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: _WeekStrip(
+                            selected: _dateRange?.start,
+                            label: _dateRange == null
+                                ? 'All dates'
+                                : _dateRangeLabel(_dateRange!),
+                            enabled: !_selectionMode,
+                            onSelectDay: _selectDay,
+                            onSelectAll: _clearDates,
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: _AppointmentSummaryStrip(summary: summary),
+                        ),
+                        SliverPersistentHeader(
+                          pinned: true,
+                          delegate: _PinnedTabsDelegate(
+                            background: surface,
+                            border: DashboardTokens.border(context),
+                            child: _StatusTabs(
+                              selected: _status,
+                              enabled: !_selectionMode,
+                              onChanged: _selectStatus,
+                            ),
+                          ),
+                        ),
+                        if (writeDisabled)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                AppSpacing.md,
+                                0,
+                                AppSpacing.md,
+                                AppSpacing.xs,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.all(AppSpacing.sm),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppColors.warning.withValues(alpha: 0.13),
+                                      AppColors.warning.withValues(alpha: 0.04),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    DashboardTokens.innerRadius,
+                                  ),
+                                  border: Border.all(
+                                    color: AppColors.warning.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.lock_clock_rounded,
+                                      size: 16,
+                                      color: AppColors.warning,
+                                    ),
+                                    const SizedBox(width: AppSpacing.xs),
+                                    Expanded(
+                                      child: Text(
+                                        'Trial grace access is read-only. Upgrade to edit.',
+                                        style: TextStyle(
+                                          color: AppColors.onSurface(context),
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ...content,
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// List cards cascade in the first time each result shows; cards that
+  /// were already shown don't replay when scrolled back into view. Only the
+  /// first screenful staggers — later cards just ease in as they scroll up.
+  Widget _listItem(Appointment appointment, int index) {
+    final firstShow = _animatedIds.add(appointment.id);
+    return AppEntrance(
+      key: ValueKey(appointment.id),
+      index: index < 8 ? index : 0,
+      step: const Duration(milliseconds: 55),
+      enabled: firstShow,
+      child: AppointmentCard(
+        appointment: appointment,
+        selectionMode: _selectionMode,
+        selected: _selectedIds.contains(appointment.id),
+        onSelected: () => _toggleSelected(appointment.id),
       ),
     );
   }
@@ -618,24 +643,28 @@ class _AppointmentSummaryStrip extends StatelessWidget {
       data: (value) => Row(
         children: [
           _SummaryCard(
+            order: 0,
             value: value.total,
             label: 'Total',
             color: AppColors.primary,
           ),
           const SizedBox(width: 8),
           _SummaryCard(
+            order: 1,
             value: value.pending,
             label: 'Pending',
             color: AppColors.warning,
           ),
           const SizedBox(width: 8),
           _SummaryCard(
+            order: 2,
             value: value.completed,
             label: 'Completed',
             color: AppColors.success,
           ),
           const SizedBox(width: 8),
           _SummaryCard(
+            order: 3,
             value: value.cancelled,
             label: 'Cancelled',
             color: AppColors.destructive,
@@ -646,11 +675,11 @@ class _AppointmentSummaryStrip extends StatelessWidget {
         children: [
           _SummaryCard(label: 'Total'),
           SizedBox(width: 8),
-          _SummaryCard(label: 'Pending'),
+          _SummaryCard(label: 'Pending', order: 1),
           SizedBox(width: 8),
-          _SummaryCard(label: 'Completed'),
+          _SummaryCard(label: 'Completed', order: 2),
           SizedBox(width: 8),
-          _SummaryCard(label: 'Cancelled'),
+          _SummaryCard(label: 'Cancelled', order: 3),
         ],
       ),
       error: (_, _) => const SizedBox.shrink(),
@@ -659,71 +688,89 @@ class _AppointmentSummaryStrip extends StatelessWidget {
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.label, this.value, this.color});
+  const _SummaryCard({
+    required this.label,
+    this.value,
+    this.color,
+    this.order = 0,
+  });
 
   final String label;
+
+  /// Position in the strip, for the staggered entrance.
+  final int order;
   final int? value;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final accent = color ?? AppColors.subtleText(context);
+    TextStyle valueStyle(Color color) => TextStyle(
+      color: color,
+      fontSize: 19,
+      height: 1,
+      fontWeight: FontWeight.w800,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     return Expanded(
-      child: Container(
-        height: 62,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: AppColors.isDark(context)
-              ? AppColors.darkCard
-              : AppColors.card,
-          borderRadius: BorderRadius.circular(DashboardTokens.innerRadius + 2),
-          border: Border.all(color: DashboardTokens.border(context)),
-          boxShadow: DashboardTokens.shadow(context),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: accent,
-                    shape: BoxShape.circle,
+      child: AppEntrance(
+        index: order,
+        step: const Duration(milliseconds: 60),
+        child: Container(
+          height: 62,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: AppColors.isDark(context)
+                ? AppColors.darkCard
+                : AppColors.card,
+            borderRadius: BorderRadius.circular(
+              DashboardTokens.innerRadius + 2,
+            ),
+            border: Border.all(color: DashboardTokens.border(context)),
+            boxShadow: DashboardTokens.shadow(context),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        color: AppColors.mutedText(context),
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          color: AppColors.mutedText(context),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value?.toString() ?? '—',
-              style: TextStyle(
-                color: value == null
-                    ? AppColors.subtleText(context)
-                    : AppColors.onSurface(context),
-                fontSize: 19,
-                height: 1,
-                fontWeight: FontWeight.w800,
-                fontFeatures: const [FontFeature.tabularFigures()],
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              if (value == null)
+                Text('—', style: valueStyle(AppColors.subtleText(context)))
+              else
+                AppCountUp(
+                  value: value!.toDouble(),
+                  format: (v) => '${v.round()}',
+                  delay: Duration(milliseconds: 150 + 60 * order),
+                  style: valueStyle(AppColors.onSurface(context)),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -857,6 +904,18 @@ class _WeekStripState extends State<_WeekStrip> {
   static const _days = 21;
   final _selectedKey = GlobalKey();
 
+  /// Day cards built in the strip's first moments cascade in from the
+  /// right; ones scrolled into view later just appear.
+  final _age = Stopwatch()..start();
+
+  Widget _entrance(int index, Widget card) => AppEntrance(
+    index: index,
+    step: const Duration(milliseconds: 40),
+    offset: const Offset(0.5, 0),
+    enabled: _age.elapsedMilliseconds < 400,
+    child: card,
+  );
+
   DateTime get _today {
     final now = DateTime.now();
     return DateTime(now.year, now.month, now.day);
@@ -955,12 +1014,15 @@ class _WeekStripState extends State<_WeekStrip> {
                   itemBuilder: (context, index) {
                     if (index == 0) {
                       final active = widget.selected == null;
-                      return _DayCard(
-                        key: active ? _selectedKey : null,
-                        top: 'All',
-                        center: null,
-                        selected: active,
-                        onTap: widget.onSelectAll,
+                      return _entrance(
+                        index,
+                        _DayCard(
+                          key: active ? _selectedKey : null,
+                          top: 'All',
+                          center: null,
+                          selected: active,
+                          onTap: widget.onSelectAll,
+                        ),
                       );
                     }
                     final day = DateTime(
@@ -971,13 +1033,16 @@ class _WeekStripState extends State<_WeekStrip> {
                     final active =
                         widget.selected != null &&
                         DateUtils.isSameDay(day, widget.selected);
-                    return _DayCard(
-                      key: active ? _selectedKey : null,
-                      top: DateFormat('EEE').format(day),
-                      center: '${day.day}',
-                      selected: active,
-                      isToday: DateUtils.isSameDay(day, today),
-                      onTap: () => widget.onSelectDay(day),
+                    return _entrance(
+                      index,
+                      _DayCard(
+                        key: active ? _selectedKey : null,
+                        top: DateFormat('EEE').format(day),
+                        center: '${day.day}',
+                        selected: active,
+                        isToday: DateUtils.isSameDay(day, today),
+                        onTap: () => widget.onSelectDay(day),
+                      ),
                     );
                   },
                 ),
@@ -1151,6 +1216,8 @@ class _PinnedTabsDelegate extends SliverPersistentHeaderDelegate {
 }
 
 class _AppointmentsEmptyState extends StatelessWidget {
+  static const _emptyStep = Duration(milliseconds: 80);
+
   const _AppointmentsEmptyState({
     required this.filtered,
     required this.onAdd,
@@ -1171,83 +1238,107 @@ class _AppointmentsEmptyState extends StatelessWidget {
     ),
     child: Column(
       children: [
-        Container(
-          width: 96,
-          height: 96,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.primary.withValues(alpha: 0.12),
-                DashboardTokens.teal.withValues(alpha: 0.08),
-              ],
-            ),
-          ),
-          child: Center(
-            child: Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: AppColors.isDark(context)
-                    ? AppColors.darkCard
-                    : AppColors.card,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: DashboardTokens.border(context)),
-                boxShadow: DashboardTokens.shadow(context),
+        AppEntrance(
+          index: 0,
+          offset: Offset.zero,
+          scale: 0.4,
+          curve: Curves.elasticOut,
+          child: Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.12),
+                  DashboardTokens.teal.withValues(alpha: 0.08),
+                ],
               ),
-              child: const Icon(
-                Icons.event_available_rounded,
-                size: 26,
-                color: DashboardTokens.tealDeep,
+            ),
+            child: Center(
+              child: Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: AppColors.isDark(context)
+                      ? AppColors.darkCard
+                      : AppColors.card,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: DashboardTokens.border(context)),
+                  boxShadow: DashboardTokens.shadow(context),
+                ),
+                child: const Icon(
+                  Icons.event_available_rounded,
+                  size: 26,
+                  color: DashboardTokens.tealDeep,
+                ),
               ),
             ),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        Text(
-          filtered ? 'No appointments here' : 'No appointments yet',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.onSurface(context),
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.2,
+        AppEntrance(
+          index: 2,
+          step: _emptyStep,
+          child: Text(
+            filtered ? 'No appointments here' : 'No appointments yet',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.onSurface(context),
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
+            ),
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          filtered
-              ? 'Nothing matches this day or status. Pick another date or '
-                    'book a new visit.'
-              : 'Your schedule is empty. Book a visit to get started.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.mutedText(context),
-            fontSize: 13,
-            height: 1.45,
+        AppEntrance(
+          index: 3,
+          step: _emptyStep,
+          child: Text(
+            filtered
+                ? 'Nothing matches this day or status. Pick another date or '
+                      'book a new visit.'
+                : 'Your schedule is empty. Book a visit to get started.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.mutedText(context),
+              fontSize: 13,
+              height: 1.45,
+            ),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        shadcn.PrimaryButton(
-          onPressed: onAdd,
-          leading: const Icon(Icons.add_rounded, size: 16),
-          child: Text(filtered ? 'Book Appointment' : 'Book First Appointment'),
-        ),
-        if (onShowAllDates != null) ...[
-          const SizedBox(height: AppSpacing.xs),
-          shadcn.GhostButton(
-            onPressed: onShowAllDates,
-            child: const Text(
-              'Show all dates',
-              style: TextStyle(
-                color: DashboardTokens.tealDeep,
-                fontWeight: FontWeight.w600,
+        AppEntrance(
+          index: 4,
+          step: _emptyStep,
+          child: Column(
+            children: [
+              shadcn.PrimaryButton(
+                onPressed: onAdd,
+                leading: const Icon(Icons.add_rounded, size: 16),
+                child: Text(
+                  filtered ? 'Book Appointment' : 'Book First Appointment',
+                ),
               ),
-            ),
+              if (onShowAllDates != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                shadcn.GhostButton(
+                  onPressed: onShowAllDates,
+                  child: const Text(
+                    'Show all dates',
+                    style: TextStyle(
+                      color: DashboardTokens.tealDeep,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
       ],
     ),
   );

@@ -42,7 +42,7 @@ Future<void> showPlanCheckout(
             Text(
               subscription.status == PlanStatus.active
                   ? '${scheduled ? 'Schedule' : 'Upgrade to'} $label'
-                  : 'Reactivate on $label',
+                  : 'Upgrade to $label',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -84,6 +84,7 @@ Future<void> showPlanCheckout(
   if (confirmed != true || !context.mounted) return;
   if (ref.read(settingsCheckoutBusyProvider)) return;
   ref.read(settingsCheckoutBusyProvider.notifier).setBusy(true);
+  ref.read(settingsCheckoutTierProvider.notifier).set(tier);
 
   try {
     _message(context, 'Creating a secure checkout…');
@@ -135,6 +136,7 @@ Future<void> showPlanCheckout(
     );
   } finally {
     ref.read(settingsCheckoutBusyProvider.notifier).setBusy(false);
+    ref.read(settingsCheckoutTierProvider.notifier).set(null);
   }
 }
 

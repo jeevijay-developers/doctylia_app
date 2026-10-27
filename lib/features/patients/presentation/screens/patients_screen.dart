@@ -1,9 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
+import 'package:doctylia_app/core/widgets/app_motion.dart';
 import 'package:doctylia_app/app/router/route_names.dart';
 import 'package:doctylia_app/core/errors/app_failure.dart';
+import 'package:doctylia_app/core/platform/csv_cell.dart';
 import 'package:doctylia_app/core/platform/external_link_service.dart';
+import 'package:doctylia_app/core/platform/shared_file_cache.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/core/widgets/app_error_view.dart';
@@ -21,8 +23,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
 class PatientsScreen extends ConsumerStatefulWidget {
@@ -38,6 +38,10 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
   bool _exporting = false;
   bool _selectMode = false;
   final Set<String> _selectedIds = {};
+
+  /// Patient ids whose card entrance already played for the current
+  /// results; reset whenever a new query loads (search, date).
+  final Set<String> _animatedIds = {};
 
   /// UI-only: lets the clear (✕) action and "Clear filters" reset the text.
   final _searchController = TextEditingController();
@@ -97,6 +101,8 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(patientsProvider);
+    // A new query is loading: its results should cascade in again.
+    if (state.isLoading && !state.isRefreshing) _animatedIds.clear();
     final stats = ref.watch(dashboardProvider).value?.stats;
     final writeDisabled =
         ref.watch(trialStatusProvider).accessLevel == TrialAccessLevel.grace;
@@ -148,34 +154,10 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
                           onLoadMore: () =>
                               ref.read(patientsProvider.notifier).loadMore(),
                         )
-                      : PatientCard(
-                          patient: page.items[index],
-                          selectionMode: _selectMode,
-                          selected: _selectedIds.contains(page.items[index].id),
-                          onSelectionChanged: (_) =>
-                              _toggleSelected(page.items[index].id),
-                          onTap: _selectMode
-                              ? () => _toggleSelected(page.items[index].id)
-                              : () => _showPatientDetails(page.items[index]),
-                          onEdit: writeDisabled || _selectMode
-                              ? null
-                              : () => showPatientForm(
-                                  context,
-                                  ref,
-                                  patient: page.items[index],
-                                ),
-                          onCall: () => ref
-                              .read(externalLinkServiceProvider)
-                              .open(
-                                Uri(
-                                  scheme: 'tel',
-                                  path: page.items[index].phone,
-                                ),
-                              ),
-                          onCreatePrescription: () =>
-                              context.go(RoutePaths.prescriptions),
-                          onBookVisit: () =>
-                              context.go(RoutePaths.appointments),
+                      : _listItem(
+                          page.items[index],
+                          index,
+                          writeDisabled: writeDisabled,
                         ),
                 ),
               ),
@@ -188,208 +170,264 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
         if (!didPop) context.go(RoutePaths.dashboard);
       },
       child: DashboardShadcnScope(
-        child: Scaffold(
-          floatingActionButton: _selectMode
-              ? _selectedIds.isEmpty
-                    ? null
-                    : FloatingActionButton.extended(
-                        onPressed: _confirmBulkDelete,
-                        elevation: 2,
-                        backgroundColor: AppColors.destructive,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            DashboardTokens.radius,
-                          ),
-                        ),
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        label: Text(
-                          'Delete ${_selectedIds.length}',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      )
-              // The empty state has its own Register CTA; hiding the FAB
-              // there keeps it from covering that state's buttons.
-              : page != null && page.items.isEmpty
-              ? null
-              : FloatingActionButton.extended(
-                  onPressed: writeDisabled
+        child: AppMotion(
+          enabled: true,
+          child: Scaffold(
+            floatingActionButton: _selectMode
+                ? _selectedIds.isEmpty
                       ? null
-                      : () => showPatientForm(context, ref),
-                  elevation: 2,
-                  backgroundColor: AppColors.primary600,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(DashboardTokens.radius),
-                  ),
-                  icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: const Text(
-                    'Add Patient',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-          body: Column(
-            children: [
-              // ── Unified toolbar: search + date filter + actions menu ──
-              Container(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                ),
-                decoration: BoxDecoration(
-                  color: surface,
-                  border: Border(
-                    bottom: BorderSide(color: DashboardTokens.border(context)),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _SearchField(
-                        controller: _searchController,
-                        enabled: !_selectMode,
-                        showClear: _search.isNotEmpty,
-                        onChanged: _onSearchChanged,
-                        onClear: _clearSearch,
+                      : FloatingActionButton.extended(
+                          onPressed: _confirmBulkDelete,
+                          elevation: 2,
+                          backgroundColor: AppColors.destructive,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              DashboardTokens.radius,
+                            ),
+                          ),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          label: Text(
+                            'Delete ${_selectedIds.length}',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        )
+                // The empty state has its own Register CTA; hiding the FAB
+                // there keeps it from covering that state's buttons.
+                : page != null && page.items.isEmpty
+                ? null
+                : FloatingActionButton.extended(
+                    onPressed: writeDisabled
+                        ? null
+                        : () => showPatientForm(context, ref),
+                    elevation: 2,
+                    backgroundColor: AppColors.primary600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        DashboardTokens.radius,
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.xs),
-                    _ActionIconButton(
-                      icon: Icons.calendar_month_rounded,
-                      tooltip: 'Filter by registration date',
-                      isActive: _date != null,
-                      onPressed: _selectMode ? null : _pickDate,
+                    icon: const Icon(Icons.person_add_alt_1_rounded),
+                    label: const Text(
+                      'Add Patient',
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    const SizedBox(width: AppSpacing.xs),
-                    _ToolbarMenu(
-                      exporting: _exporting,
-                      canExport: !_exporting && !_selectMode,
-                      canSelect:
-                          !_selectMode && (page?.items.isNotEmpty ?? false),
-                      onExport: _exportCsv,
-                      onSelect: () => setState(() => _selectMode = true),
+                  ),
+            body: Column(
+              children: [
+                // ── Unified toolbar: search + date filter + actions menu ──
+                Container(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: surface,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: DashboardTokens.border(context),
+                      ),
                     ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () =>
-                      ref.read(patientsProvider.notifier).refresh(),
-                  child: CustomScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: _DirectoryStats(
-                          total: stats?.patients,
-                          todayAppointments: stats?.todayAppointments,
-                          newThisWeek: stats?.newPatientsThisWeek,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _SearchField(
+                          controller: _searchController,
+                          enabled: !_selectMode,
+                          showClear: _search.isNotEmpty,
+                          onChanged: _onSearchChanged,
+                          onClear: _clearSearch,
                         ),
                       ),
-                      SliverToBoxAdapter(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.fromLTRB(
-                            AppSpacing.md,
-                            AppSpacing.sm,
-                            AppSpacing.md,
-                            AppSpacing.xs,
+                      const SizedBox(width: AppSpacing.xs),
+                      _ActionIconButton(
+                        icon: Icons.calendar_month_rounded,
+                        tooltip: 'Filter by registration date',
+                        isActive: _date != null,
+                        onPressed: _selectMode ? null : _pickDate,
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      _ToolbarMenu(
+                        exporting: _exporting,
+                        canExport: !_exporting && !_selectMode,
+                        canSelect:
+                            !_selectMode && (page?.items.isNotEmpty ?? false),
+                        onExport: _exportCsv,
+                        onSelect: () => setState(() => _selectMode = true),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () =>
+                        ref.read(patientsProvider.notifier).refresh(),
+                    child: CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: _DirectoryStats(
+                            total: stats?.patients,
+                            todayAppointments: stats?.todayAppointments,
+                            newThisWeek: stats?.newPatientsThisWeek,
                           ),
-                          child: IgnorePointer(
-                            ignoring: _selectMode,
-                            child: Opacity(
-                              opacity: _selectMode ? 0.5 : 1,
-                              child: Row(
-                                children: [
-                                  _FilterTab(
-                                    label: 'All dates',
-                                    icon: Icons.all_inclusive_rounded,
-                                    selected: _date == null,
-                                    onTap: _clearDate,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _FilterTab(
-                                    label: 'Registered today',
-                                    icon: Icons.today_rounded,
-                                    selected: _isToday(_date),
-                                    onTap: _filterToday,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _FilterTab(
-                                    label: _date != null && !_isToday(_date)
-                                        ? 'Registered ${DateFormat('d MMM yyyy').format(_date!)}'
-                                        : 'Pick date',
-                                    icon: Icons.event_outlined,
-                                    selected: _date != null && !_isToday(_date),
-                                    onTap: _pickDate,
-                                  ),
-                                ],
+                        ),
+                        SliverToBoxAdapter(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.md,
+                              AppSpacing.sm,
+                              AppSpacing.md,
+                              AppSpacing.xs,
+                            ),
+                            child: IgnorePointer(
+                              ignoring: _selectMode,
+                              child: Opacity(
+                                opacity: _selectMode ? 0.5 : 1,
+                                child: Row(
+                                  children: [
+                                    _pill(
+                                      0,
+                                      _FilterTab(
+                                        label: 'All dates',
+                                        icon: Icons.all_inclusive_rounded,
+                                        selected: _date == null,
+                                        onTap: _clearDate,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _pill(
+                                      1,
+                                      _FilterTab(
+                                        label: 'Registered today',
+                                        icon: Icons.today_rounded,
+                                        selected: _isToday(_date),
+                                        onTap: _filterToday,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _pill(
+                                      2,
+                                      _FilterTab(
+                                        label: _date != null && !_isToday(_date)
+                                            ? 'Registered ${DateFormat('d MMM yyyy').format(_date!)}'
+                                            : 'Pick date',
+                                        icon: Icons.event_outlined,
+                                        selected:
+                                            _date != null && !_isToday(_date),
+                                        onTap: _pickDate,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      if (page != null)
-                        SliverToBoxAdapter(
-                          child: _CountRow(
-                            text: '',
-                            leading: _selectMode
-                                ? null
-                                : _ResultChip(
-                                    label:
-                                        'All Patients (${page.totalCount ?? page.items.length})',
-                                    filtered: hasFilters,
-                                  ),
-                            trailingText: _selectMode
-                                ? '${_selectedIds.length} of ${page.items.length} selected on this page'
-                                : hasFilters
-                                ? 'match your filters'
-                                : null,
-                            selectMode: _selectMode,
-                            actions: [
-                              if (page.items.isNotEmpty && _selectMode) ...[
-                                IconButton(
-                                  onPressed: () => _toggleAll(page.items),
-                                  tooltip:
+                        if (page != null)
+                          SliverToBoxAdapter(
+                            child: _CountRow(
+                              text: '',
+                              leading: _selectMode
+                                  ? null
+                                  : _ResultChip(
+                                      label:
+                                          'All Patients (${page.totalCount ?? page.items.length})',
+                                      filtered: hasFilters,
+                                    ),
+                              trailingText: _selectMode
+                                  ? '${_selectedIds.length} of ${page.items.length} selected on this page'
+                                  : hasFilters
+                                  ? 'match your filters'
+                                  : null,
+                              selectMode: _selectMode,
+                              actions: [
+                                if (page.items.isNotEmpty && _selectMode) ...[
+                                  IconButton(
+                                    onPressed: () => _toggleAll(page.items),
+                                    tooltip:
+                                        _selectedIds.length == page.items.length
+                                        ? 'Deselect all'
+                                        : 'Select all on this page',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: Icon(
                                       _selectedIds.length == page.items.length
-                                      ? 'Deselect all'
-                                      : 'Select all on this page',
-                                  visualDensity: VisualDensity.compact,
-                                  icon: Icon(
-                                    _selectedIds.length == page.items.length
-                                        ? Icons.deselect_rounded
-                                        : Icons.select_all_rounded,
-                                    size: 20,
-                                    color: DashboardTokens.tealDeep,
+                                          ? Icons.deselect_rounded
+                                          : Icons.select_all_rounded,
+                                      size: 20,
+                                      color: DashboardTokens.tealDeep,
+                                    ),
                                   ),
-                                ),
-                                IconButton(
-                                  onPressed: _exitSelectMode,
-                                  tooltip: 'Done',
-                                  visualDensity: VisualDensity.compact,
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    size: 20,
-                                    color: AppColors.destructive,
+                                  IconButton(
+                                    onPressed: _exitSelectMode,
+                                    tooltip: 'Done',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 20,
+                                      color: AppColors.destructive,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                      ...content,
-                    ],
+                        ...content,
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  /// List cards cascade in the first time each result shows; cards that
+  /// were already shown don't replay when scrolled back into view. Only the
+  /// first screenful staggers — later cards just ease in as they scroll up.
+  Widget _listItem(Patient patient, int index, {required bool writeDisabled}) {
+    final firstShow = _animatedIds.add(patient.id);
+    return AppEntrance(
+      key: ValueKey(patient.id),
+      index: index < 8 ? index : 0,
+      step: const Duration(milliseconds: 55),
+      enabled: firstShow,
+      child: PatientCard(
+        patient: patient,
+        selectionMode: _selectMode,
+        selected: _selectedIds.contains(patient.id),
+        onSelectionChanged: (_) => _toggleSelected(patient.id),
+        onTap: _selectMode
+            ? () => _toggleSelected(patient.id)
+            : () => _showPatientDetails(patient),
+        onEdit: writeDisabled || _selectMode
+            ? null
+            : () => showPatientForm(context, ref, patient: patient),
+        onCall: () => ref
+            .read(externalLinkServiceProvider)
+            .open(Uri(scheme: 'tel', path: patient.phone)),
+        onCreatePrescription: () => context.go(RoutePaths.prescriptions),
+        onBookVisit: () => context.go(RoutePaths.appointments),
+      ),
+    );
+  }
+
+  /// Filter pills slide in from the right after the stat tiles (once, on
+  /// open — the row stays mounted across filter changes).
+  Widget _pill(int index, Widget child) => AppEntrance(
+    index: index + 3,
+    step: const Duration(milliseconds: 60),
+    offset: const Offset(0.3, 0),
+    child: child,
+  );
 
   String _patientWord(int count) => count == 1 ? 'patient' : 'patients';
 
@@ -442,16 +480,12 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
           return;
         }
         final csv = _patientsCsv(patients);
-        final directory = await getTemporaryDirectory();
-        final path =
-            '${directory.path}${Platform.pathSeparator}patients-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv';
-        final file = File(path);
-        await file.writeAsString('\ufeff$csv', flush: true);
-        await SharePlus.instance.share(
-          ShareParams(
-            files: [XFile(path, mimeType: 'text/csv')],
-            subject: 'Doctylia patient export',
-          ),
+        await SharedFileCache.shareText(
+          fileName:
+              'patients-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv',
+          content: '\ufeff$csv',
+          mimeType: 'text/csv',
+          subject: 'Doctylia patient export',
         );
       },
       onFailure: (failure) async => ScaffoldMessenger.of(
@@ -763,7 +797,7 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
     ];
     String cell(Object? value) {
       if (value == null) return '';
-      return '"${value.toString().replaceAll('"', '""')}"';
+      return '"${csvSafeText(value.toString()).replaceAll('"', '""')}"';
     }
 
     String date(DateTime? value) =>
@@ -1141,6 +1175,7 @@ class _DirectoryStats extends StatelessWidget {
     child: Row(
       children: [
         _StatTile(
+          order: 0,
           icon: Icons.groups_rounded,
           label: 'Total patients',
           value: total,
@@ -1148,6 +1183,7 @@ class _DirectoryStats extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         _StatTile(
+          order: 1,
           icon: Icons.event_available_rounded,
           label: "Today's visits",
           value: todayAppointments,
@@ -1155,6 +1191,7 @@ class _DirectoryStats extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         _StatTile(
+          order: 2,
           icon: Icons.person_add_alt_rounded,
           label: 'New this week',
           value: newThisWeek,
@@ -1167,68 +1204,89 @@ class _DirectoryStats extends StatelessWidget {
 
 class _StatTile extends StatelessWidget {
   const _StatTile({
+    required this.order,
     required this.icon,
     required this.label,
     required this.value,
     required this.color,
   });
 
+  /// Position in the bar, for the staggered entrance.
+  final int order;
   final IconData icon;
   final String label;
   final int? value;
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
-      decoration: BoxDecoration(
-        color: AppColors.isDark(context) ? AppColors.darkCard : AppColors.card,
-        borderRadius: BorderRadius.circular(DashboardTokens.innerRadius + 2),
-        border: Border.all(color: DashboardTokens.border(context)),
-        boxShadow: DashboardTokens.shadow(context),
-      ),
-      child: Row(
-        children: [
-          DashboardIconTile(icon: icon, color: color, size: 30),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value?.toString() ?? '—',
-                  style: TextStyle(
-                    color: AppColors.onSurface(context),
-                    fontSize: 17,
-                    height: 1.1,
-                    fontWeight: FontWeight.w800,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: AppColors.mutedText(context),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
+  Widget build(BuildContext context) {
+    final valueStyle = TextStyle(
+      color: AppColors.onSurface(context),
+      fontSize: 17,
+      height: 1.1,
+      fontWeight: FontWeight.w800,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Expanded(
+      child: AppEntrance(
+        index: order,
+        step: const Duration(milliseconds: 60),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
+          decoration: BoxDecoration(
+            color: AppColors.isDark(context)
+                ? AppColors.darkCard
+                : AppColors.card,
+            borderRadius: BorderRadius.circular(
+              DashboardTokens.innerRadius + 2,
             ),
+            border: Border.all(color: DashboardTokens.border(context)),
+            boxShadow: DashboardTokens.shadow(context),
           ),
-        ],
+          child: Row(
+            children: [
+              DashboardIconTile(icon: icon, color: color, size: 30),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (value == null)
+                      Text('—', style: valueStyle)
+                    else
+                      AppCountUp(
+                        value: value!.toDouble(),
+                        format: (v) => '${v.round()}',
+                        delay: Duration(milliseconds: 150 + 60 * order),
+                        style: valueStyle,
+                      ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: AppColors.mutedText(context),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _PatientsEmptyState extends StatelessWidget {
+  static const _emptyStep = Duration(milliseconds: 80);
+
   const _PatientsEmptyState({
     required this.filtered,
     required this.onReset,
@@ -1249,89 +1307,111 @@ class _PatientsEmptyState extends StatelessWidget {
     ),
     child: Column(
       children: [
-        Container(
-          width: 96,
-          height: 96,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.primary.withValues(alpha: 0.12),
-                DashboardTokens.teal.withValues(alpha: 0.08),
-              ],
-            ),
-          ),
-          child: Center(
-            child: Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: AppColors.isDark(context)
-                    ? AppColors.darkCard
-                    : AppColors.card,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: DashboardTokens.border(context)),
-                boxShadow: DashboardTokens.shadow(context),
+        AppEntrance(
+          index: 0,
+          offset: Offset.zero,
+          scale: 0.4,
+          curve: Curves.elasticOut,
+          child: Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.12),
+                  DashboardTokens.teal.withValues(alpha: 0.08),
+                ],
               ),
-              child: Icon(
-                filtered
-                    ? Icons.person_search_rounded
-                    : Icons.folder_shared_rounded,
-                size: 26,
-                color: DashboardTokens.tealDeep,
+            ),
+            child: Center(
+              child: Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: AppColors.isDark(context)
+                      ? AppColors.darkCard
+                      : AppColors.card,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: DashboardTokens.border(context)),
+                  boxShadow: DashboardTokens.shadow(context),
+                ),
+                child: Icon(
+                  filtered
+                      ? Icons.person_search_rounded
+                      : Icons.folder_shared_rounded,
+                  size: 26,
+                  color: DashboardTokens.tealDeep,
+                ),
               ),
             ),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        Text(
-          filtered ? 'No patients match your filters' : 'No patients yet',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.onSurface(context),
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.2,
+        AppEntrance(
+          index: 2,
+          step: _emptyStep,
+          child: Text(
+            filtered ? 'No patients match your filters' : 'No patients yet',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.onSurface(context),
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
+            ),
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          filtered
-              ? 'Try a different search or date.'
-              : 'Register your first patient to start building records.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.mutedText(context),
-            fontSize: 13,
-            height: 1.45,
+        AppEntrance(
+          index: 3,
+          step: _emptyStep,
+          child: Text(
+            filtered
+                ? 'Try a different search or date.'
+                : 'Register your first patient to start building records.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.mutedText(context),
+              fontSize: 13,
+              height: 1.45,
+            ),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        shadcn.PrimaryButton(
-          onPressed: onAdd,
-          leading: const Icon(Icons.add_rounded, size: 16),
-          child: const Text('Register Patient'),
-        ),
-        if (filtered) ...[
-          const SizedBox(height: AppSpacing.xs),
-          shadcn.GhostButton(
-            onPressed: onReset,
-            leading: const Icon(
-              Icons.filter_alt_off_outlined,
-              size: 16,
-              color: DashboardTokens.tealDeep,
-            ),
-            child: const Text(
-              'Clear filters',
-              style: TextStyle(
-                color: DashboardTokens.tealDeep,
-                fontWeight: FontWeight.w600,
+        AppEntrance(
+          index: 4,
+          step: _emptyStep,
+          child: Column(
+            children: [
+              shadcn.PrimaryButton(
+                onPressed: onAdd,
+                leading: const Icon(Icons.add_rounded, size: 16),
+                child: const Text('Register Patient'),
               ),
-            ),
+              if (filtered) ...[
+                const SizedBox(height: AppSpacing.xs),
+                shadcn.GhostButton(
+                  onPressed: onReset,
+                  leading: const Icon(
+                    Icons.filter_alt_off_outlined,
+                    size: 16,
+                    color: DashboardTokens.tealDeep,
+                  ),
+                  child: const Text(
+                    'Clear filters',
+                    style: TextStyle(
+                      color: DashboardTokens.tealDeep,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
       ],
     ),
   );

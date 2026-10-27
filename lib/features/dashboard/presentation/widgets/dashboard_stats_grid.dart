@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:doctylia_app/core/widgets/app_motion.dart';
 import 'package:doctylia_app/app/router/route_names.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
@@ -31,57 +32,74 @@ class DashboardStatsGrid extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _RevenueCard(
-            amount: money.format(stats.totalRevenue),
-            paidInvoiceCount: stats.monthlyPaidInvoices,
-            growthPercent: stats.revenueGrowthPercent,
-            points: snapshot.revenueSeries,
-            onTap: () => context.go(RoutePaths.billing),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _KpiCard(
-                    icon: Icons.calendar_today_rounded,
-                    tag: 'SCHEDULED',
-                    tagColor: AppColors.primary,
-                    value: number.format(stats.appointments),
-                    label: 'Appointments',
-                    detail: '${snapshot.todaySchedule.length} scheduled today',
-                    detailColor: AppColors.primary,
-                    onTap: () => context.go(RoutePaths.appointments),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: _KpiCard(
-                    icon: Icons.people_outline_rounded,
-                    tag: '+${stats.newPatientsThisWeek} NEW',
-                    tagColor: AppColors.success,
-                    value: number.format(stats.patients),
-                    label: 'Total Patients',
-                    detail: '${stats.activePatientsThisWeek} active this week',
-                    detailColor: AppColors.success,
-                    onTap: () => context.go(RoutePaths.patients),
-                  ),
-                ),
-              ],
+          AppEntrance(
+            index: 2,
+            child: _RevenueCard(
+              amount: stats.totalRevenue.toDouble(),
+              format: (v) => money.format(v.round()),
+              paidInvoiceCount: stats.monthlyPaidInvoices,
+              growthPercent: stats.revenueGrowthPercent,
+              points: snapshot.revenueSeries,
+              onTap: () => context.go(RoutePaths.billing),
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          _PracticeRatingCard(
-            reviewCount: stats.reviewCount,
-            averageRating: stats.averageRating,
-            onTap: () => context.go(RoutePaths.reviews),
+          AppEntrance(
+            index: 3,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _KpiCard(
+                      icon: Icons.calendar_today_rounded,
+                      tag: 'SCHEDULED',
+                      tagColor: AppColors.primary,
+                      value: stats.appointments.toDouble(),
+                      format: (v) => number.format(v.round()),
+                      label: 'Appointments',
+                      detail:
+                          '${snapshot.todaySchedule.length} scheduled today',
+                      detailColor: AppColors.primary,
+                      onTap: () => context.go(RoutePaths.appointments),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: _KpiCard(
+                      icon: Icons.people_outline_rounded,
+                      tag: '+${stats.newPatientsThisWeek} NEW',
+                      tagColor: AppColors.success,
+                      value: stats.patients.toDouble(),
+                      format: (v) => number.format(v.round()),
+                      label: 'Total Patients',
+                      detail:
+                          '${stats.activePatientsThisWeek} active this week',
+                      detailColor: AppColors.success,
+                      onTap: () => context.go(RoutePaths.patients),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          _PublicProfileCard(
-            isLive: snapshot.websiteIsLive,
-            slug: snapshot.websiteSlug,
-            onTap: () => context.go(RoutePaths.myWebsite),
+          AppEntrance(
+            index: 4,
+            child: _PracticeRatingCard(
+              reviewCount: stats.reviewCount,
+              averageRating: stats.averageRating,
+              onTap: () => context.go(RoutePaths.reviews),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          AppEntrance(
+            index: 5,
+            child: _PublicProfileCard(
+              isLive: snapshot.websiteIsLive,
+              slug: snapshot.websiteSlug,
+              onTap: () => context.go(RoutePaths.myWebsite),
+            ),
           ),
         ],
       ),
@@ -92,13 +110,15 @@ class DashboardStatsGrid extends StatelessWidget {
 class _RevenueCard extends StatelessWidget {
   const _RevenueCard({
     required this.amount,
+    required this.format,
     required this.paidInvoiceCount,
     required this.growthPercent,
     required this.points,
     required this.onTap,
   });
 
-  final String amount;
+  final double amount;
+  final String Function(double value) format;
   final int paidInvoiceCount;
   final double? growthPercent;
   final List<RevenuePoint> points;
@@ -147,9 +167,10 @@ class _RevenueCard extends StatelessWidget {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
-                        child: Text(
-                          amount,
-                          maxLines: 1,
+                        child: AppCountUp(
+                          value: amount,
+                          format: format,
+                          delay: const Duration(milliseconds: 300),
                           style: TextStyle(
                             color: AppColors.onSurface(context),
                             fontSize: 27,
@@ -178,9 +199,13 @@ class _RevenueCard extends StatelessWidget {
             const SizedBox(height: 14),
             SizedBox(
               height: 42,
-              child: CustomPaint(
-                painter: _SparklinePainter(
-                  values: points.map((point) => point.amount).toList(),
+              child: AppReveal(
+                delay: const Duration(milliseconds: 350),
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: _SparklinePainter(
+                    values: points.map((point) => point.amount).toList(),
+                  ),
                 ),
               ),
             ),
@@ -230,6 +255,7 @@ class _KpiCard extends StatelessWidget {
     required this.tag,
     required this.tagColor,
     required this.value,
+    required this.format,
     required this.label,
     required this.detail,
     required this.detailColor,
@@ -239,7 +265,8 @@ class _KpiCard extends StatelessWidget {
   final IconData icon;
   final String tag;
   final Color tagColor;
-  final String value;
+  final double value;
+  final String Function(double value) format;
   final String label;
   final String detail;
   final Color detailColor;
@@ -267,9 +294,10 @@ class _KpiCard extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        Text(
-          value,
-          maxLines: 1,
+        AppCountUp(
+          value: value,
+          format: format,
+          delay: const Duration(milliseconds: 380),
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: AppColors.onSurface(context),

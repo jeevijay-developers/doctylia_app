@@ -2,7 +2,10 @@ import 'package:doctylia_app/core/errors/app_failure.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/core/widgets/app_error_view.dart';
-import 'package:doctylia_app/core/widgets/app_loading_view.dart';
+import 'package:doctylia_app/core/widgets/app_motion.dart';
+import 'package:doctylia_app/core/widgets/skeleton.dart';
+import 'package:doctylia_app/features/settings/domain/entities/settings_models.dart';
+import 'package:doctylia_app/shared/entitlements/plan_status.dart';
 import 'package:doctylia_app/features/settings/presentation/providers/settings_providers.dart';
 import 'package:doctylia_app/features/settings/presentation/widgets/profile_settings_tab.dart';
 import 'package:doctylia_app/features/settings/presentation/widgets/subscription_settings_tab.dart';
@@ -22,40 +25,43 @@ class SettingsScreen extends ConsumerWidget {
       _ => 0,
     };
     return settings.when(
-      loading: () => const AppLoadingView(label: 'Loading settings'),
+      loading: () => const _SettingsSkeleton(),
       error: (error, _) => AppErrorView(
         message: error is AppFailure
             ? error.userMessage
             : 'Could not load settings.',
         onRetry: () => ref.read(settingsProvider.notifier).refresh(),
       ),
-      data: (snapshot) => DefaultTabController(
-        initialIndex: initialIndex,
-        length: 3,
-        child: Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.sm,
-                AppSpacing.md,
-                AppSpacing.xs,
+      data: (snapshot) => AppMotion(
+        enabled: true,
+        child: DefaultTabController(
+          initialIndex: initialIndex,
+          length: 3,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.xs,
+                ),
+                child: _SettingsTabBar(),
               ),
-              child: _SettingsTabBar(),
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  ProfileSettingsTab(snapshot: snapshot),
-                  SubscriptionSettingsTab(
-                    subscription: snapshot.subscription,
-                    paymentMode: snapshot.paymentMode,
-                  ),
-                  _AccountTab(),
-                ],
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    ProfileSettingsTab(snapshot: snapshot),
+                    SubscriptionSettingsTab(
+                      subscription: snapshot.subscription,
+                      paymentMode: snapshot.paymentMode,
+                    ),
+                    _AccountTab(),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -295,4 +301,73 @@ class _AccountTab extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// Loading state: the tab bar and Profile tab rendered 1:1 as a skeleton
+/// (no spinner), from placeholder data.
+class _SettingsSkeleton extends StatelessWidget {
+  const _SettingsSkeleton();
+
+  static final _placeholder = SettingsSnapshot(
+    profile: const DoctorProfileSettings(
+      fullName: 'Dr. Doctor Name',
+      specialization: 'Specialization',
+      qualifications: 'MBBS',
+      experienceYears: 10,
+      phone: '9876543210',
+      clinicName: 'Clinic Name',
+      city: 'City',
+      state: 'State',
+      address: 'Address',
+      consultationFee: 500,
+      registrationNumber: 'REG',
+      clinicEmail: 'clinic@example.com',
+      gstRegistered: false,
+      gstin: '',
+    ),
+    subscription: const SubscriptionDetails(
+      tier: PlanTier.pro,
+      status: PlanStatus.active,
+      proPrice: 0,
+      premiumPrice: 0,
+      appointmentsUsed: 0,
+      appointmentsCap: 0,
+    ),
+    paymentMode: PaymentMode.live,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = AppColors.isDark(context);
+    return Skeleton(
+      semanticsLabel: 'Loading settings',
+      palette: SkeletonPalette(
+        surface: isDark ? AppColors.darkCard : AppColors.card,
+        surfaceBorder: AppColors.border(context),
+        bone: isDark
+            ? AppColors.darkBorder
+            : AppColors.secondarySurface(context),
+        innerSurface: isDark
+            ? AppColors.darkSecondary
+            : AppColors.secondarySurface(context).withValues(alpha: 0.55),
+      ),
+      child: DefaultTabController(
+        length: 3,
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.sm,
+                AppSpacing.md,
+                AppSpacing.xs,
+              ),
+              child: _SettingsTabBar(),
+            ),
+            Expanded(child: ProfileSettingsTab(snapshot: _placeholder)),
+          ],
+        ),
+      ),
+    );
+  }
 }

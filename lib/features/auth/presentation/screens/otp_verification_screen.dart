@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:doctylia_app/app/router/route_names.dart';
+import 'package:doctylia_app/core/errors/app_failure.dart';
+import 'package:doctylia_app/core/security/turnstile.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
 import 'package:doctylia_app/features/auth/presentation/providers/auth_providers.dart';
@@ -11,18 +13,48 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class OtpVerificationScreen extends ConsumerStatefulWidget {
-  const OtpVerificationScreen({super.key, required this.phone});
+/// Route payload for the code screen: where the code went and, for signup,
+/// the name the new account is created with.
+///
+/// Travels as a JSON-safe map ([toExtra]/[fromExtra]): go_router round-trips
+/// `extra` through its codec on refresh and drops non-JSON objects.
+class OtpRequest {
+  const OtpRequest({required this.phone, this.fullName});
+
+  static OtpRequest? fromExtra(Object? extra) {
+    if (extra is! Map) return null;
+    final phone = extra['phone'];
+    if (phone is! String) return null;
+    final fullName = extra['fullName'];
+    return OtpRequest(
+      phone: phone,
+      fullName: fullName is String ? fullName : null,
+    );
+  }
+
+  Map<String, String> toExtra() => {'phone': phone, 'fullName': ?fullName};
 
   /// E.164 number the code was sent to.
   final String phone;
+
+  /// Set only for signup (resends must keep `shouldCreateUser: true`).
+  final String? fullName;
+
+  bool get isSignup => fullName != null;
+}
+
+class OtpVerificationScreen extends ConsumerStatefulWidget {
+  const OtpVerificationScreen({super.key, required this.request});
+
+  final OtpRequest request;
 
   @override
   ConsumerState<OtpVerificationScreen> createState() =>
       _OtpVerificationScreenState();
 }
 
-class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
+class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
+    with TurnstileGate<OtpVerificationScreen> {
   static const _codeLength = 6;
   static const _resendCooldown = 30;
 
@@ -50,9 +82,9 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     super.dispose();
   }
 
-  void _startCooldown() {
+  void _startCooldown([int seconds = _resendCooldown]) {
     _timer?.cancel();
-    setState(() => _secondsLeft = _resendCooldown);
+    setState(() => _secondsLeft = seconds);
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsLeft <= 1) timer.cancel();
       setState(() => _secondsLeft--);
@@ -69,7 +101,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     setState(() => _resendError = null);
     await ref
         .read(authControllerProvider.notifier)
-        .verifyPhoneOtp(phone: widget.phone, token: code);
+        .verifyPhoneOtp(phone: widget.request.phone, token: code);
     if (!mounted) return;
     if (ref.read(authControllerProvider).value?.errorMessage != null) {
       _codeController.clear();
@@ -78,19 +110,34 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
   }
 
   Future<void> _resend() async {
+    if (captchaMissing()) return;
+    final captchaToken = spendCaptcha();
     setState(() {
       _isResending = true;
       _resendError = null;
     });
     final controller = ref.read(authControllerProvider.notifier);
     controller.clearError();
-    final error = await controller.sendPhoneOtp(widget.phone);
+    final request = widget.request;
+    final failure = request.isSignup
+        ? await controller.sendSignupOtp(
+            phone: request.phone,
+            fullName: request.fullName!,
+            captchaToken: captchaToken,
+          )
+        : await controller.sendPhoneOtp(
+            request.phone,
+            captchaToken: captchaToken,
+          );
     if (!mounted) return;
     setState(() {
       _isResending = false;
-      _resendError = error;
+      _resendError = failure?.userMessage;
     });
-    if (error == null) {
+    if (failure is OtpCooldownFailure) {
+      // The earlier code is still valid; just wait out the server cooldown.
+      _startCooldown(failure.retryAfterSeconds);
+    } else if (failure == null) {
       _codeController.clear();
       _startCooldown();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -108,123 +155,259 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
   }
 
   String get _displayPhone {
+    final phone = widget.request.phone;
     for (final country in AuthCountry.all) {
-      if (widget.phone.startsWith(country.dialCode)) {
-        final digits = widget.phone.substring(country.dialCode.length);
+      if (phone.startsWith(country.dialCode)) {
+        final digits = phone.substring(country.dialCode.length);
         if (digits.length == 10) {
           return '${country.dialCode} ${digits.substring(0, 5)} ${digits.substring(5)}';
         }
         return '${country.dialCode} $digits';
       }
     }
-    return widget.phone;
+    return phone;
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final authState = auth.value ?? const AuthState.unauthenticated();
-    final error = _resendError ?? authState.errorMessage;
+    final error = captchaError ?? _resendError ?? authState.errorMessage;
 
+    // Content is anchored to the top and the CTA + footer to the bottom, so
+    // spare height on tall phones opens up between them instead of above
+    // the header. SliverFillRemaining still scrolls once the keyboard is up.
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.md,
-              AppSpacing.xs,
-              AppSpacing.md,
-              AppSpacing.lg,
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  AuthTopBar(onBack: _back),
-                  const SizedBox(height: AppSpacing.lg),
-                  const AuthHeroCard(
-                    badgeLabel: 'VERIFY',
-                    badgeIcon: Icons.sms_outlined,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  AuthHeading(
-                    title: 'Enter Code',
-                    subtitle: Text.rich(
-                      TextSpan(
-                        text: 'We sent a 6-digit code to\n',
-                        children: [
-                          TextSpan(
-                            text: _displayPhone,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.onSurface(context),
-                            ),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: CustomScrollView(
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md,
+                      AppSpacing.xs,
+                      AppSpacing.md,
+                      AppSpacing.md,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        AuthTopBar(onBack: _back),
+                        const SizedBox(height: AppSpacing.md),
+                        const AuthHeroCard(
+                          badgeLabel: 'VERIFY',
+                          badgeIcon: Icons.sms_outlined,
+                          size: 120,
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        AuthHeading(
+                          title: 'Enter Code',
+                          subtitle: const Text(
+                            'We sent a 6-digit verification code to',
                           ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Center(
+                          child: _PhoneChip(
+                            phone: _displayPhone,
+                            onEdit: authState.isSubmitting ? null : _back,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        _OtpBoxes(
+                          controller: _codeController,
+                          focusNode: _codeFocus,
+                          length: _codeLength,
+                          hasError: authState.errorMessage != null,
+                          enabled: !authState.isSubmitting,
+                          onChanged: (value) {
+                            if (authState.errorMessage != null) {
+                              ref
+                                  .read(authControllerProvider.notifier)
+                                  .clearError();
+                            }
+                            if (value.length == _codeLength) _verify();
+                          },
+                        ),
+                        if (error != null) ...[
+                          const SizedBox(height: AppSpacing.sm),
+                          AuthInlineError(message: error),
                         ],
-                      ),
-                    ),
-                  ),
-                  Center(
-                    child: TextButton(
-                      onPressed: authState.isSubmitting ? null : _back,
-                      child: const Text('Change number'),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _OtpBoxes(
-                    controller: _codeController,
-                    focusNode: _codeFocus,
-                    length: _codeLength,
-                    hasError: authState.errorMessage != null,
-                    enabled: !authState.isSubmitting,
-                    onChanged: (value) {
-                      if (authState.errorMessage != null) {
-                        ref.read(authControllerProvider.notifier).clearError();
-                      }
-                      if (value.length == _codeLength) _verify();
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Center(
-                    child: _secondsLeft > 0
-                        ? Text(
-                            'Resend code in 0:${_secondsLeft.toString().padLeft(2, '0')}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppColors.mutedText(context),
-                            ),
-                          )
-                        : TextButton(
-                            onPressed: _isResending || authState.isSubmitting
-                                ? null
-                                : _resend,
-                            child: Text(
-                              _isResending ? 'Sending…' : 'Resend code',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                        const SizedBox(height: AppSpacing.md),
+                        // Resend sends a new OTP, so it needs a fresh token;
+                        // the check appears once the cooldown has ended.
+                        if (_secondsLeft == 0) ...[
+                          TurnstileWidget(
+                            action: widget.request.isSignup
+                                ? 'signup'
+                                : 'login',
+                            controller: turnstile,
+                            onToken: onCaptcha,
                           ),
+                          if (captchaEnabled)
+                            const SizedBox(height: AppSpacing.sm),
+                        ],
+                        _ResendRow(
+                          secondsLeft: _secondsLeft,
+                          isResending: _isResending,
+                          onResend: authState.isSubmitting ? null : _resend,
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        const Spacer(),
+                        AuthGradientButton(
+                          label: widget.request.isSignup
+                              ? 'Verify & Create Account'
+                              : 'Verify & Log In',
+                          isLoading: authState.isSubmitting,
+                          onPressed: _verify,
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        const AuthSecurityFooter(),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  if (error != null) ...[
-                    AuthInlineError(message: error),
-                    const SizedBox(height: AppSpacing.md),
-                  ],
-                  AuthGradientButton(
-                    label: 'Verify & Log In',
-                    isLoading: authState.isSubmitting,
-                    onPressed: _verify,
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  const AuthSecurityFooter(),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The destination number with an inline edit affordance ("Change number").
+class _PhoneChip extends StatelessWidget {
+  const _PhoneChip({required this.phone, required this.onEdit});
+
+  final String phone;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = AppColors.isDark(context);
+    return Semantics(
+      button: true,
+      label: '$phone, change number',
+      excludeSemantics: true,
+      child: Material(
+        color: isDark
+            ? AppColors.primary.withValues(alpha: 0.18)
+            : AppColors.primary100,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: InkWell(
+          onTap: onEdit,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.phone_iphone_rounded,
+                  size: 18,
+                  color: isDark ? AppColors.primary200 : AppColors.primary600,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  phone,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                    color: AppColors.onSurface(context),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface(context),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.edit_rounded,
+                    size: 14,
+                    color: isDark ? AppColors.primary200 : AppColors.primary600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Didn't receive the code?" with a countdown pill, then a Resend action.
+class _ResendRow extends StatelessWidget {
+  const _ResendRow({
+    required this.secondsLeft,
+    required this.isResending,
+    required this.onResend,
+  });
+
+  final int secondsLeft;
+  final bool isResending;
+  final VoidCallback? onResend;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = AppColors.mutedText(context);
+    final minutes = secondsLeft ~/ 60;
+    final seconds = (secondsLeft % 60).toString().padLeft(2, '0');
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: AppSpacing.xs,
+      children: [
+        Text(
+          "Didn't receive the code?",
+          style: TextStyle(fontSize: 14, color: muted),
+        ),
+        if (secondsLeft > 0)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.secondarySurface(context),
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.timer_outlined, size: 14, color: muted),
+                const SizedBox(width: 4),
+                Text(
+                  'Resend in $minutes:$seconds',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: muted,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          TextButton(
+            onPressed: isResending ? null : onResend,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+              minimumSize: const Size(0, 36),
+            ),
+            child: Text(
+              isResending ? 'Sending…' : 'Resend code',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+      ],
     );
   }
 }

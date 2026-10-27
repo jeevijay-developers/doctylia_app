@@ -92,6 +92,10 @@ final class SupabaseReviewRepository implements ReviewRepository {
       averageRating: total == 0 ? 0 : ratingTotal / total,
       verified: rows.where((row) => row['is_verified'] == true).length,
       pinned: rows.where((row) => row['is_pinned'] == true).length,
+      // Same rows as above; no extra query.
+      starCounts: ReviewStats.countStars(
+        rows.map((row) => (row['rating'] as num).toInt()),
+      ),
     );
   });
 

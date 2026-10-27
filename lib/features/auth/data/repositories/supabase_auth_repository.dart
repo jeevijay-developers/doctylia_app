@@ -45,12 +45,14 @@ final class SupabaseAuthRepository implements AuthRepository {
   Future<Result<AccountLookup>> signIn({
     required String email,
     required String password,
+    String? captchaToken,
   }) {
     return RepositoryGuard.run(() async {
       try {
         final response = await _client.auth.signInWithPassword(
           email: email.trim(),
           password: password,
+          captchaToken: captchaToken,
         );
         final session = response.session;
         if (session == null) {
@@ -70,13 +72,43 @@ final class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<Result<void>> sendPhoneOtp(String phone) {
+  Future<Result<void>> sendPhoneOtp(String phone, {String? captchaToken}) {
     return RepositoryGuard.run(() async {
       try {
-        // Accounts are created on the web; never sign up from the app.
-        await _client.auth.signInWithOtp(phone: phone, shouldCreateUser: false);
+        // Same call as the web's ProductionOtpService login mode. GoTrue
+        // generates the code and hands it to the send-sms-hook edge
+        // function, which delivers it through the DLT-approved MSG91
+        // template. Accounts are created on the web; never sign up here.
+        await _client.auth.signInWithOtp(
+          phone: phone,
+          shouldCreateUser: false,
+          captchaToken: captchaToken,
+        );
       } catch (error, stackTrace) {
-        throw SupabaseAuthErrorMapper.map(error, stackTrace);
+        throw SupabaseAuthErrorMapper.mapPhoneOtp(error, stackTrace);
+      }
+    });
+  }
+
+  @override
+  Future<Result<void>> sendSignupOtp({
+    required String phone,
+    required String fullName,
+    String? captchaToken,
+  }) {
+    return RepositoryGuard.run(() async {
+      try {
+        // Mirrors the web's ProductionOtpService signup mode. The account is
+        // created when the code is verified; handle_new_user() then inserts
+        // the profiles row (7-day trial) and the 'doctor' role.
+        await _client.auth.signInWithOtp(
+          phone: phone,
+          shouldCreateUser: true,
+          data: {'full_name': fullName.trim()},
+          captchaToken: captchaToken,
+        );
+      } catch (error, stackTrace) {
+        throw SupabaseAuthErrorMapper.mapPhoneOtp(error, stackTrace);
       }
     });
   }
@@ -105,7 +137,7 @@ final class SupabaseAuthRepository implements AuthRepository {
         );
       } catch (error, stackTrace) {
         if (error is AppFailure) rethrow;
-        throw SupabaseAuthErrorMapper.map(error, stackTrace);
+        throw SupabaseAuthErrorMapper.mapPhoneOtp(error, stackTrace);
       }
     });
   }
@@ -122,12 +154,13 @@ final class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<Result<void>> sendPasswordReset(String email) {
+  Future<Result<void>> sendPasswordReset(String email, {String? captchaToken}) {
     return RepositoryGuard.run(() async {
       try {
         await _client.auth.resetPasswordForEmail(
           email.trim(),
           redirectTo: SupabaseConfig.passwordResetRedirectUrl,
+          captchaToken: captchaToken,
         );
       } catch (error, stackTrace) {
         throw SupabaseAuthErrorMapper.map(error, stackTrace);
@@ -193,10 +226,81 @@ final class SupabaseAuthRepository implements AuthRepository {
 }
 
 abstract final class SupabaseAuthErrorMapper {
+  /// Phone OTP send/verify errors, kept aligned with the web's
+  /// productionOtpService.ts so both platforms show the same outcomes.
+  static AppFailure mapPhoneOtp(Object error, StackTrace stackTrace) {
+    if (error is AppFailure) return error;
+    if (error is! AuthException) return map(error, stackTrace);
+    if (_isCaptchaFailure(error)) return _captchaFailure(error, stackTrace);
+
+    final retryAfter = parseRetryAfterSeconds(error.message);
+    if (retryAfter != null) {
+      return OtpCooldownFailure(
+        retryAfter,
+        cause: error,
+        stackTrace: stackTrace,
+      );
+    }
+    final message = error.message.toLowerCase();
+    if (message.contains('signups not allowed') ||
+        message.contains('user not found') ||
+        error.code == 'user_not_found') {
+      return PhoneNotRegisteredFailure(cause: error, stackTrace: stackTrace);
+    }
+    final code = error.code?.toLowerCase();
+    if (code == 'otp_expired' ||
+        code == 'invalid_otp' ||
+        message.contains('token has expired or is invalid')) {
+      return AuthFailure(
+        'Incorrect or expired code. Try again.',
+        cause: error,
+        stackTrace: stackTrace,
+      );
+    }
+    if (error is AuthRetryableFetchException || _looksLikeNetwork(error)) {
+      return NetworkFailure(cause: error, stackTrace: stackTrace);
+    }
+    if (error.statusCode == '429' ||
+        code == 'over_request_rate_limit' ||
+        code == 'over_sms_send_rate_limit') {
+      return const RateLimitFailure();
+    }
+    // Anything else (e.g. the send-sms-hook's "Could not send OTP. Please
+    // try again.") is already user-facing; the web shows it verbatim too.
+    if (error.message.trim().isNotEmpty) {
+      return AuthFailure(error.message, cause: error, stackTrace: stackTrace);
+    }
+    return map(error, stackTrace);
+  }
+
+  /// Supabase Auth's CAPTCHA protection rejected the request (missing,
+  /// expired or already-used Turnstile token).
+  static bool _isCaptchaFailure(AuthException error) =>
+      error.code?.toLowerCase() == 'captcha_failed' ||
+      error.message.toLowerCase().contains('captcha');
+
+  static AppFailure _captchaFailure(Object error, StackTrace stackTrace) =>
+      AuthFailure(
+        'Security check failed. Please complete the verification and try '
+        'again.',
+        cause: error,
+        stackTrace: stackTrace,
+      );
+
+  /// Extracts N from GoTrue's "...you can only request this after N seconds".
+  static int? parseRetryAfterSeconds(String message) {
+    final match = RegExp(
+      r'after (\d+) seconds?',
+      caseSensitive: false,
+    ).firstMatch(message);
+    return match == null ? null : int.parse(match.group(1)!);
+  }
+
   static AppFailure map(Object error, StackTrace stackTrace) {
     if (error is AppFailure) return error;
 
     if (error is AuthException) {
+      if (_isCaptchaFailure(error)) return _captchaFailure(error, stackTrace);
       final code = error.code?.toLowerCase();
       final status = error.statusCode;
       final message = error.message.toLowerCase();

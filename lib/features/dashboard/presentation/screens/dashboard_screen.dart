@@ -1,3 +1,4 @@
+import 'package:doctylia_app/core/widgets/app_motion.dart';
 import 'package:doctylia_app/core/errors/app_failure.dart';
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:doctylia_app/core/theme/app_spacing.dart';
@@ -48,10 +49,13 @@ class DashboardScreen extends ConsumerWidget {
         final trialStatus = ref.watch(trialStatusProvider);
         return RefreshIndicator(
           onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
-          child: _DashboardBody(
-            snapshot: snapshot,
-            session: session,
-            trialStatus: trialStatus,
+          child: AppMotion(
+            enabled: true,
+            child: _DashboardBody(
+              snapshot: snapshot,
+              session: session,
+              trialStatus: trialStatus,
+            ),
           ),
         );
       },
@@ -83,42 +87,54 @@ class _DashboardBody extends StatelessWidget {
       AppSpacing.xl,
     ),
     children: [
-      DashboardHeader(session: session),
+      AppEntrance(index: 0, child: DashboardHeader(session: session)),
       if (trialStatus.isTrialEndingSoon ||
           trialStatus.isExpired ||
           trialStatus.isCancelled) ...[
         const SizedBox(height: AppSpacing.sm),
-        TrialPlanBanner(status: trialStatus),
+        AppEntrance(index: 1, child: TrialPlanBanner(status: trialStatus)),
       ],
       if (snapshot.isNearAppointmentCap) ...[
         const SizedBox(height: AppSpacing.sm),
-        AppointmentCapBanner(
-          used: snapshot.appointmentsUsed,
-          cap: snapshot.appointmentsCap!,
+        AppEntrance(
+          index: 1,
+          child: AppointmentCapBanner(
+            used: snapshot.appointmentsUsed,
+            cap: snapshot.appointmentsCap!,
+          ),
         ),
       ],
       const SizedBox(height: _sectionGap),
       DashboardStatsGrid(snapshot: snapshot),
       if (snapshot.hasNoPracticeData) ...[
         const SizedBox(height: _sectionGap),
-        const _NewDoctorEmptyState(),
+        const AppEntrance(index: 6, child: _NewDoctorEmptyState()),
       ],
       const SizedBox(height: _sectionGap),
-      TodayScheduleCard(
-        appointments: snapshot.todaySchedule,
-        totalTodayCount: snapshot.stats.todayAppointments,
+      AppEntrance(
+        index: 7,
+        child: TodayScheduleCard(
+          appointments: snapshot.todaySchedule,
+          totalTodayCount: snapshot.stats.todayAppointments,
+        ),
       ),
       const SizedBox(height: _sectionGap),
-      RevenueCard(
-        points: snapshot.revenueSeries,
-        monthlyRevenue: snapshot.monthlyRevenue,
-        growthPercent: snapshot.stats.revenueGrowthPercent,
+      AppEntrance(
+        index: 8,
+        child: RevenueCard(
+          points: snapshot.revenueSeries,
+          monthlyRevenue: snapshot.monthlyRevenue,
+          growthPercent: snapshot.stats.revenueGrowthPercent,
+        ),
       ),
       const SizedBox(height: _sectionGap),
-      WebsiteShareCard(
-        doctorName: session?.displayName ?? 'Doctor',
-        websiteSlug: snapshot.websiteSlug,
-        isLive: snapshot.websiteIsLive,
+      AppEntrance(
+        index: 9,
+        child: WebsiteShareCard(
+          doctorName: session?.displayName ?? 'Doctor',
+          websiteSlug: snapshot.websiteSlug,
+          isLive: snapshot.websiteIsLive,
+        ),
       ),
     ],
   );

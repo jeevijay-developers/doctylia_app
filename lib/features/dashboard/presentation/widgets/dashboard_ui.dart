@@ -1,5 +1,6 @@
 import 'package:doctylia_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:doctylia_app/core/widgets/app_motion.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
 /// Visual tokens shared by the home dashboard widgets.
@@ -41,9 +42,12 @@ abstract final class DashboardTokens {
 /// [shadcn.Theme] ancestor. This derives one from the active Material
 /// brightness and the Doctylia colour tokens.
 class DashboardShadcnScope extends StatelessWidget {
-  const DashboardShadcnScope({required this.child, super.key});
+  const DashboardShadcnScope({required this.child, this.primary, super.key});
 
   final Widget child;
+
+  /// Overrides the shadcn primary (e.g. medical teal on clinical screens).
+  final Color? primary;
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +64,8 @@ class DashboardShadcnScope extends StatelessWidget {
       foreground: () => foreground,
       card: () => isDark ? AppColors.darkCard : AppColors.card,
       cardForeground: () => foreground,
-      primary: () => isDark ? AppColors.primary : AppColors.primary600,
+      primary: () =>
+          primary ?? (isDark ? AppColors.primary : AppColors.primary600),
       primaryForeground: () => Colors.white,
       secondary: () => AppColors.secondarySurface(context),
       secondaryForeground: () => foreground,
@@ -118,16 +123,22 @@ class DashboardSurface extends StatelessWidget {
       child: child,
     );
     if (onTap == null) return card;
-    return Stack(
-      children: [
-        card,
-        Positioned.fill(
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(onTap: onTap, borderRadius: radius),
+    return AppPressScale(
+      builder: (onHighlight) => Stack(
+        children: [
+          card,
+          Positioned.fill(
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                onTap: onTap,
+                onHighlightChanged: onHighlight,
+                borderRadius: radius,
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

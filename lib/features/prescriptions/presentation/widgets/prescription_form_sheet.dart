@@ -11,12 +11,16 @@ Future<Prescription?> showPrescriptionForm(
   BuildContext context,
   WidgetRef ref, {
   Prescription? prescription,
+
+  /// Renew: prefill from this prescription but save a new one dated today.
+  Prescription? template,
 }) => showModalBottomSheet<Prescription>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
   showDragHandle: true,
-  builder: (_) => _PrescriptionForm(prescription: prescription),
+  builder: (_) =>
+      _PrescriptionForm(prescription: prescription, template: template),
 );
 
 InputDecoration _fieldDecoration(
@@ -45,8 +49,9 @@ void _toast(BuildContext context, String message) => ScaffoldMessenger.of(
 /// existing patient → name/date → age/weight → diagnosis → structured
 /// medicines → Save Prescription.
 class _PrescriptionForm extends ConsumerStatefulWidget {
-  const _PrescriptionForm({this.prescription});
+  const _PrescriptionForm({this.prescription, this.template});
   final Prescription? prescription;
+  final Prescription? template;
   @override
   ConsumerState<_PrescriptionForm> createState() => _PrescriptionFormState();
 }
@@ -63,16 +68,18 @@ class _PrescriptionFormState extends ConsumerState<_PrescriptionForm> {
   bool saving = false;
 
   bool get _editing => widget.prescription != null;
+  bool get _renewing => !_editing && widget.template != null;
 
   @override
   void initState() {
     super.initState();
-    final value = widget.prescription;
+    final value = widget.prescription ?? widget.template;
     patient = TextEditingController(text: value?.patientName);
     diagnosis = TextEditingController(text: value?.diagnosis);
     age = TextEditingController(text: value?.patientAge?.toString());
     weight = TextEditingController(text: _weightText(value?.patientWeight));
-    date = value?.date ?? DateTime.now();
+    // A renewal is a new prescription issued today.
+    date = _renewing ? DateTime.now() : value?.date ?? DateTime.now();
     patientId = value?.patientId;
     // Existing medicines are already complete, so start them collapsed.
     medicines.addAll(
@@ -106,7 +113,11 @@ class _PrescriptionFormState extends ConsumerState<_PrescriptionForm> {
         child: ListView(
           children: [
             Text(
-              _editing ? 'Edit Prescription' : 'Add Prescription',
+              _editing
+                  ? 'Edit Prescription'
+                  : _renewing
+                  ? 'Renew Prescription'
+                  : 'Add Prescription',
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
@@ -326,11 +337,12 @@ class _PrescriptionFormState extends ConsumerState<_PrescriptionForm> {
       date: date,
       patientAge: int.tryParse(age.text),
       patientWeight: double.tryParse(weight.text),
-      // The web form does not edit these; keep whatever is already stored.
-      notes: existing?.notes,
-      advice: existing?.advice,
-      dietAdvice: existing?.dietAdvice,
-      lifestyleAdvice: existing?.lifestyleAdvice,
+      // The web form does not edit these; keep whatever is already stored
+      // (a renewal carries over the source's notes and advice too).
+      notes: (existing ?? widget.template)?.notes,
+      advice: (existing ?? widget.template)?.advice,
+      dietAdvice: (existing ?? widget.template)?.dietAdvice,
+      lifestyleAdvice: (existing ?? widget.template)?.lifestyleAdvice,
       followUpDate: existing?.followUpDate,
       followUpInstructions: existing?.followUpInstructions,
       visitId: existing?.visitId,

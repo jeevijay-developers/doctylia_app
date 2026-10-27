@@ -12,11 +12,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
+/// Patient details to seed a *new* booking (e.g. from a website inquiry);
+/// ignored when editing an existing [Appointment].
+class AppointmentPrefill {
+  const AppointmentPrefill({this.name, this.phone, this.email, this.complaint});
+
+  final String? name;
+  final String? phone;
+  final String? email;
+  final String? complaint;
+}
+
 Future<void> showAppointmentForm(
   BuildContext context,
   WidgetRef ref, {
   Appointment? appointment,
   bool walkIn = false,
+  AppointmentPrefill? prefill,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
@@ -25,14 +37,19 @@ Future<void> showAppointmentForm(
   shape: appointmentSheetShape,
   clipBehavior: Clip.antiAlias,
   builder: (_) => DashboardShadcnScope(
-    child: _AppointmentForm(appointment: appointment, walkIn: walkIn),
+    child: _AppointmentForm(
+      appointment: appointment,
+      walkIn: walkIn,
+      prefill: prefill,
+    ),
   ),
 );
 
 class _AppointmentForm extends ConsumerStatefulWidget {
-  const _AppointmentForm({this.appointment, this.walkIn = false});
+  const _AppointmentForm({this.appointment, this.walkIn = false, this.prefill});
   final Appointment? appointment;
   final bool walkIn;
+  final AppointmentPrefill? prefill;
 
   @override
   ConsumerState<_AppointmentForm> createState() => _AppointmentFormState();
@@ -59,11 +76,12 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
   void initState() {
     super.initState();
     final item = widget.appointment;
+    final seed = item == null ? widget.prefill : null;
     final fee = ref.read(doctorProfileProvider)?.consultationFee ?? 0;
-    _name = TextEditingController(text: item?.patientName);
-    _phone = TextEditingController(text: item?.patientPhone);
+    _name = TextEditingController(text: item?.patientName ?? seed?.name);
+    _phone = TextEditingController(text: item?.patientPhone ?? seed?.phone);
     _age = TextEditingController(text: item?.patientAge?.toString());
-    _email = TextEditingController(text: item?.patientEmail);
+    _email = TextEditingController(text: item?.patientEmail ?? seed?.email);
     _service = TextEditingController(text: item?.serviceName ?? 'Consultation');
     _amount = TextEditingController(
       text: item != null
@@ -72,7 +90,9 @@ class _AppointmentFormState extends ConsumerState<_AppointmentForm> {
           ? ''
           : fee.toStringAsFixed(0),
     );
-    _complaint = TextEditingController(text: item?.chiefComplaint);
+    _complaint = TextEditingController(
+      text: item?.chiefComplaint ?? seed?.complaint,
+    );
     _notes = TextEditingController(text: item?.notes);
     _scheduled = item?.scheduledAt ?? _nextQuarterHour(DateTime.now());
     _type = item?.type ?? AppointmentType.clinic;

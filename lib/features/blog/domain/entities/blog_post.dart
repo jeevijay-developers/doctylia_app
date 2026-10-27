@@ -45,6 +45,15 @@ class BlogPost {
   );
 }
 
+/// Practice-wide post counts (unaffected by search / filters), like the
+/// web's "3 published · 2 drafts".
+class BlogStats {
+  const BlogStats({required this.total, required this.published});
+  final int total;
+  final int published;
+  int get drafts => (total - published).clamp(0, total);
+}
+
 class BlogPostDraft {
   const BlogPostDraft({
     required this.title,

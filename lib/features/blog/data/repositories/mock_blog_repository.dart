@@ -12,15 +12,19 @@ final class MockBlogRepository implements BlogRepository {
   Future<Result<PageResult<BlogPost>>> list(
     PageRequest page, {
     String search = '',
+    String? category,
+    bool? published,
   }) => RepositoryGuard.run(() {
     final term = search.trim().toLowerCase();
     final rows =
         _items
             .where(
               (row) =>
-                  term.isEmpty ||
-                  row.title.toLowerCase().contains(term) ||
-                  (row.category ?? '').toLowerCase().contains(term),
+                  (category == null || row.category == category) &&
+                  (published == null || row.isPublished == published) &&
+                  (term.isEmpty ||
+                      row.title.toLowerCase().contains(term) ||
+                      (row.category ?? '').toLowerCase().contains(term)),
             )
             .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -34,6 +38,13 @@ final class MockBlogRepository implements BlogRepository {
       totalCount: rows.length,
     );
   });
+  @override
+  Future<Result<BlogStats>> getStats() => RepositoryGuard.run(
+    () => BlogStats(
+      total: _items.length,
+      published: _items.where((row) => row.isPublished).length,
+    ),
+  );
   @override
   Future<Result<BlogPost>> save(BlogPostDraft draft) => RepositoryGuard.run(() {
     if (draft.title.trim().isEmpty) throw ArgumentError('Title is required.');
